@@ -3186,13 +3186,19 @@ function setStraightenOn(on) {
 
     // allowedSourceSet が null なら全データ、Setが渡されればそのノード群を起点に持つ
     // 直接エッジだけを集計する（ホバー時の絞り込み）。
+    // reached には、増減率(%)の記載が無いエッジも含め、対象範囲から実際に辿り着く
+    // PLノードを全て入れる（列を非表示にするかどうかの判定は、数値の有無ではなく
+    // 「辿り着くかどうか」で行うため。数値が無いだけの場合は列を残して「数値記載なし」
+    // というセルを見せたい）。
     function computeCellStats(allowedSourceSet) {
       const stats = new Map(); // nodeId -> {sum, count}
+      const reached = new Set(); // 数値の有無に関わらず、対象範囲から辿り着くPLノードid
       DATA_BASE.edges.forEach(e => {
         if (!plNodeSet.has(e.target)) return;
         if (allowedSourceSet && !allowedSourceSet.has(e.source)) return;
         const targetNode = baseNodesById.get(e.target);
         if (targetNode.plPositive !== false) return; // ネガティブな結果ラベルのみ対象
+        reached.add(e.target);
         const pct = parsePct(e.change_pct);
         if (pct == null) return;
         if (!stats.has(e.target)) stats.set(e.target, { sum: 0, count: 0 });
@@ -3200,7 +3206,7 @@ function setStraightenOn(on) {
         s.sum += Math.abs(pct);
         s.count += 1;
       });
-      return stats;
+      return { stats, reached };
     }
 
     function computeReachable(startId) {
@@ -3222,12 +3228,12 @@ function setStraightenOn(on) {
     let defaultFocusId = null;
     baseNodesById.forEach((node, id) => { if (defaultFocusId == null && node.label === DEFAULT_FOCUS_LABEL) defaultFocusId = id; });
     const defaultReachable = defaultFocusId ? computeReachable(defaultFocusId) : null;
-    const baselineStats = computeCellStats(defaultReachable);
+    const baselineResult = computeCellStats(defaultReachable);
 
     // 色スケールの基準は常にベースラインの最大値に固定する。ホバーのたびにスケールが
     // 変わると色の意味が読み取りにくくなるため。
     let maxAvg = 0;
-    baselineStats.forEach(s => { maxAvg = Math.max(maxAvg, s.sum / s.count); });
+    baselineResult.stats.forEach(s => { maxAvg = Math.max(maxAvg, s.sum / s.count); });
     if (maxAvg <= 0) maxAvg = 1;
 
     function colorForValue(avg) {
@@ -3280,7 +3286,9 @@ function setStraightenOn(on) {
     wrap.appendChild(caption);
     wrap.appendChild(table);
 
-    function paint(stats, isHover, focusId) {
+    function paint(result, isHover, focusId) {
+      const stats = result.stats;
+      const reached = result.reached;
       cellEls.forEach((td, nodeId) => {
         const s = stats.get(nodeId);
         td.innerHTML = '';
@@ -3303,13 +3311,11 @@ function setStraightenOn(on) {
         td.appendChild(valueSpan);
         td.title = `${baseNodesById.get(nodeId).industry} / ${baseNodesById.get(nodeId).label}\n平均${avg.toFixed(1)}%（ネガティブな変動 n=${s.count}件）`;
       });
-      // 値が1件も無い列は非表示にして、表示中の範囲に関係ある列だけに絞る。
+      // 表示中の範囲から辿り着くPLノードが1つも無い列（＝関係の無い列）だけを非表示にする。
+      // 辿り着きはするが増減率の数値が無いだけの場合は列を残し、「数値記載なし」セルで示す。
       // 「簡略化して表示」がオンの間は、PL_HEATMAP_SIMPLIFY_HIDEに含まれる列も追加で隠す。
       heatLabels.forEach(label => {
-        const hasData = colNodeIds.get(label).some(nodeId => {
-          const s = stats.get(nodeId);
-          return s && s.count > 0;
-        });
+        const hasData = colNodeIds.get(label).some(nodeId => reached.has(nodeId));
         const forceHide = plHeatmapSimplify && PL_HEATMAP_SIMPLIFY_HIDE.has(label);
         colHeaderTh.get(label).classList.toggle('is-hidden-col', !hasData || forceHide);
         colTds.get(label).forEach(td => td.classList.toggle('is-hidden-col', !hasData || forceHide));
@@ -3319,12 +3325,12 @@ function setStraightenOn(on) {
         : '「ホルムズ海峡封鎖」から辿れるPL項目を表示中（ネガティブな変動率のみ・データが無い組み合わせはグレー）';
     }
 
-    paint(baselineStats, false);
+    paint(baselineResult, false);
 
     let lastPlHeatmapFocusId = null;
     updatePlHeatmap = function (hoverId) {
       lastPlHeatmapFocusId = hoverId;
-      if (!hoverId) { paint(baselineStats, false); return; }
+      if (!hoverId) { paint(baselineResult, false); return; }
       const reachable = computeReachable(hoverId);
       paint(computeCellStats(reachable), true, hoverId);
     };
