@@ -3150,7 +3150,7 @@ function setStraightenOn(on) {
     const PL_HEATMAP_SIMPLIFY_HIDE = new Set(['売上総利益率の悪化', '連結営業利益減少', '地域営業利益減少']);
 
     const plNodeIds = DATA_BASE.nodes
-      .filter(n => n.industry && !isBsLabel(n.label) && PL_HEATMAP_GENERIC_LABELS.has(n.label))
+      .filter(n => n.industry && n.industry !== '全般' && !isBsLabel(n.label) && PL_HEATMAP_GENERIC_LABELS.has(n.label))
       .map(n => n.id);
     const plNodeSet = new Set(plNodeIds);
     if (plNodeIds.length === 0) { wrap.textContent = '対象データがありません。'; return; }
@@ -3274,7 +3274,7 @@ function setStraightenOn(on) {
     wrap.appendChild(caption);
     wrap.appendChild(table);
 
-    function paint(stats, isHover) {
+    function paint(stats, isHover, focusId) {
       cellEls.forEach((td, nodeId) => {
         const s = stats.get(nodeId);
         td.innerHTML = '';
@@ -3309,7 +3309,7 @@ function setStraightenOn(on) {
         colTds.get(label).forEach(td => td.classList.toggle('is-hidden-col', !hasData || forceHide));
       });
       caption.textContent = isHover
-        ? 'ホバー中のノードから辿れるPL項目のみ表示（ネガティブな変動率の平均）'
+        ? `「${baseNodesById.get(focusId).label}」から辿れるPL項目のみ表示（ネガティブな変動率の平均）`
         : '「ホルムズ海峡封鎖」から辿れるPL項目を表示中（ネガティブな変動率のみ・データが無い組み合わせはグレー）';
     }
 
@@ -3320,7 +3320,7 @@ function setStraightenOn(on) {
       lastPlHeatmapFocusId = hoverId;
       if (!hoverId) { paint(baselineStats, false); return; }
       const reachable = computeReachable(hoverId);
-      paint(computeCellStats(reachable), true);
+      paint(computeCellStats(reachable), true, hoverId);
     };
     refreshPlHeatmapSimplify = function () {
       updatePlHeatmap(lastPlHeatmapFocusId);
