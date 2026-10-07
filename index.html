@@ -2156,7 +2156,13 @@ function setStraightenOn(on) {
     const visitCount = new Map(nodeIds.map(id => [id, 0]));
     nodeIds.forEach(id => { if ((inCount.get(id) || 0) === 0) { layer.set(id, 0); queue.push(id); } });
     if (queue.length === 0 && nodeIds.length) { layer.set(nodeIds[0], 0); queue.push(nodeIds[0]); } // pure-cycle fallback
-    const maxGuard = nodeIds.length * 4 + 20;
+    // 各ノードは最長経路の更新のたびに再キューされ、その再キュー回数は下のvisitCountで
+    // ノードあたり最大nodeIds.length回に制限している。そのためキュー全体の処理回数は
+    // 理論上 nodeIds.length^2 まで必要になりうる（合流の多いダイヤモンド型の分岐が
+    // 多いグラフほど再計算が増えるため）。これより小さいと、本当は非循環なのに
+    // ガードで打ち切られて一部のノードが層0（最上段）に誤って落ちることがある
+    // （「下流のはずのノードが根と同じ段に表示される」不具合の原因だった）。
+    const maxGuard = nodeIds.length * nodeIds.length + 50;
     let qi = 0, guard = 0;
     while (qi < queue.length && guard < maxGuard) {
       guard++;
@@ -2465,6 +2471,21 @@ function setStraightenOn(on) {
     const nonPlEdges = compEdgeListSafe.filter(e => !plSet.has(e.source) && !plSet.has(e.target));
     const nonPlLayer = computeLongestPathLayers(nonPlIds, nonPlEdges);
     const maxNonPlLayer = nonPlIds.length ? Math.max(...nonPlIds.map(id => nonPlLayer.get(id))) : -1;
+    // 非PLノードなのに、入力元が全てPLノード（例:「企業収益の減少」のような「全般」
+    // ラベルのPL科目からさらに非PL側へ伸びる、ごく少数の例外的なエッジ）のノードは、
+    // 上のnonPlEdgesからは入力エッジが無いように見えるため、何も調整しないと「見かけ上の
+    // 根」として層0（最上段）に置かれてしまう。実際には下流のノードなのに根と同じ段に
+    // 表示され、エッジが逆向き（下から上）に見える不具合になるため、そのようなノードは
+    // 非PL層の最後尾（PL帯の直前）へ送る。
+    const hasNonPlIncoming = new Set(nonPlEdges.map(e => e.target));
+    const hasOnlyPlIncoming = new Set(
+      compEdgeListSafe.filter(e => plSet.has(e.source) && !plSet.has(e.target)).map(e => e.target)
+    );
+    nonPlIds.forEach(id => {
+      if (nonPlLayer.get(id) === 0 && !hasNonPlIncoming.has(id) && hasOnlyPlIncoming.has(id)) {
+        nonPlLayer.set(id, maxNonPlLayer);
+      }
+    });
 
     const plEdges = compEdgeListSafe.filter(e => plSet.has(e.source) && plSet.has(e.target));
     const plLayer = computeLongestPathLayers(plIds, plEdges);
