@@ -1211,29 +1211,34 @@ function setStraightenOn(on) {
 
   let isolationMode = false;
   let isolationFocusId = null;
+  // trueなら「そのノードから辿れる下流のノードだけ」（右クリックの「このノードを起点に
+  // したツリーを表示」）、falseなら従来通り「上流・下流の両方」（「ノード限定」タグ）。
+  let isolationDescendantsOnly = false;
   // showIsolationFocus()は呼ばれた時点のスナップショットSVGを作るだけで、以後の表示系
   // タグ（企業影響無しノード非表示・ポジティブなPLノードを表示など）の切り替えには自動
   // 追従しない。絞り込みビューを開いている間にそれらを切り替えたら呼び直す。
   function refreshIsolationIfOpen() {
-    if (isolationFocusId) showIsolationFocus(isolationFocusId);
+    if (isolationFocusId) showIsolationFocus(isolationFocusId, isolationDescendantsOnly);
   }
 
-  function computeIsolationSet(focusId) {
+  function computeIsolationSet(focusId, descendantsOnly) {
     // ancestors: nodes that can reach focusId by following edges forward
     const ancestors = new Set();
-    let queue = [focusId];
-    while (queue.length) {
-      const id = queue.shift();
-      nodesById.get(id).in.forEach(e => {
-        if (!ancestors.has(e.source) && e.source !== focusId) {
-          ancestors.add(e.source);
-          queue.push(e.source);
-        }
-      });
+    if (!descendantsOnly) {
+      let aqueue = [focusId];
+      while (aqueue.length) {
+        const id = aqueue.shift();
+        nodesById.get(id).in.forEach(e => {
+          if (!ancestors.has(e.source) && e.source !== focusId) {
+            ancestors.add(e.source);
+            aqueue.push(e.source);
+          }
+        });
+      }
     }
     // descendants: nodes reachable from focusId by following edges forward
     const descendants = new Set();
-    queue = [focusId];
+    let queue = [focusId];
     while (queue.length) {
       const id = queue.shift();
       nodesById.get(id).out.forEach(e => {
@@ -2629,7 +2634,7 @@ function setStraightenOn(on) {
     if (!item || !contextMenuTargetId) { hideNodeContextMenu(); return; }
     if (item.dataset.action === 'isolate') {
       isolationFocusId = contextMenuTargetId;
-      showIsolationFocus(contextMenuTargetId);
+      showIsolationFocus(contextMenuTargetId, true);
     }
     hideNodeContextMenu();
   });
@@ -3039,8 +3044,9 @@ function setStraightenOn(on) {
     return card;
   }
 
-  function showIsolationFocus(focusId) {
-    const isoSet = computeIsolationSet(focusId);
+  function showIsolationFocus(focusId, descendantsOnly) {
+    isolationDescendantsOnly = !!descendantsOnly;
+    const isoSet = computeIsolationSet(focusId, isolationDescendantsOnly);
     const isoNodeIds = Array.from(isoSet).filter(id => id === focusId || ((!hideNoImpactNodes || companyImpactKeepSet.has(id)) && positivePlPasses(id) && regionPasses(id) && step2NodePasses(id) && scenarioNodePasses(id) && manualHidePasses(id)));
     const keptSet = new Set(isoNodeIds);
     const isoEdges = edges.filter(e => keptSet.has(e.source) && keptSet.has(e.target) && e.source !== e.target);
@@ -3048,8 +3054,9 @@ function setStraightenOn(on) {
     const wrap = document.getElementById('isolationSvgWrap');
     wrap.innerHTML = '';
     wrap.appendChild(svg);
-    document.getElementById('isolationTitle').textContent =
-      `「${nodesById.get(focusId).label}」を中心とした因果連鎖（${isoNodeIds.length}ノード / ${isoEdges.length}リンク）`;
+    document.getElementById('isolationTitle').textContent = isolationDescendantsOnly
+      ? `「${nodesById.get(focusId).label}」を起点とした下流の因果連鎖（${isoNodeIds.length}ノード / ${isoEdges.length}リンク）`
+      : `「${nodesById.get(focusId).label}」を中心とした因果連鎖（${isoNodeIds.length}ノード / ${isoEdges.length}リンク）`;
     document.getElementById('isolationPanel').style.display = '';
     document.querySelector('main').style.display = 'none';
     highlightScenariosIn(wrap, scenariosShown ? currentScenarios : null);
