@@ -3047,7 +3047,15 @@ function setStraightenOn(on) {
   function showIsolationFocus(focusId, descendantsOnly) {
     isolationDescendantsOnly = !!descendantsOnly;
     const isoSet = computeIsolationSet(focusId, isolationDescendantsOnly);
-    const isoNodeIds = Array.from(isoSet).filter(id => id === focusId || ((!hideNoImpactNodes || companyImpactKeepSet.has(id)) && positivePlPasses(id) && regionPasses(id) && step2NodePasses(id) && scenarioNodePasses(id) && manualHidePasses(id)));
+    // 「このノードを起点にしたツリーを表示」（下流のみ）は、辿れるノードを全て見せるのが
+    // 目的のため、「企業影響無しノード非表示」などの絞り込みタグは適用しない
+    // （手動で非表示にしたノードだけは、ユーザーが明示的に除外した意思を尊重して適用する）。
+    const isoNodeIds = Array.from(isoSet).filter(id => {
+      if (id === focusId) return true;
+      if (!manualHidePasses(id)) return false;
+      if (isolationDescendantsOnly) return true;
+      return (!hideNoImpactNodes || companyImpactKeepSet.has(id)) && positivePlPasses(id) && regionPasses(id) && step2NodePasses(id) && scenarioNodePasses(id);
+    });
     const keptSet = new Set(isoNodeIds);
     const isoEdges = edges.filter(e => keptSet.has(e.source) && keptSet.has(e.target) && e.source !== e.target);
     const svg = renderGraphSvg(isoNodeIds, isoEdges, { idSeq: 'iso', registerGlobal: false, responsive: true, focusId });
