@@ -2458,13 +2458,20 @@ function setStraightenOn(on) {
   function layoutComponent(nodeIds, compEdgeList) {
     const compEdgeListSafe = compEdgeList.filter(e => e.source !== e.target); // ignore any self-loop
 
-    // PL/BS勘定科目ノード（node.industryが非空）は常に非PLノードより下の「PL帯」に
-    // まとめて表示する。PL帯の内部では、PL同士の因果連鎖（例:「人件費の増加」→
+    // PL/BS勘定科目ノード（node.industryが非空かつ実在の業種）は常に非PLノードより下の
+    // 「PL帯」にまとめて表示する。PL帯の内部では、PL同士の因果連鎖（例:「人件費の増加」→
     // 「営業利益減少」）の前後関係だけは維持する。非PLノードのレイヤーは、PLノードが
-    // 存在しないものとして（PLが絡むエッジを無視して）計算する — ごく少数、PLノードから
-    // さらに非PL側へ伸びるエッジ（マクロ的な「全般」ラベルに多い）があるが、それらは
-    // PL帯を最下層に固定するためにレイアウト上は無視する。
-    const plSet = new Set(nodeIds.filter(id => !!nodesById.get(id).industry));
+    // 存在しないものとして（PLが絡むエッジを無視して）計算する。
+    // 業種「全般」は特定の会社に紐づかないマクロ的なPL科目（例:「企業収益の減少」）で、
+    // そこからさらに非PL側へ伸びるエッジ（例:「企業収益の減少→設備投資の押し下げ」）を
+    // 持つことがある。これをPL帯扱いにすると、その先の非PLノードがlayer計算上「入力
+    // エッジの無い根」に見えてしまい、本来下流のはずのノードが根と同じ最上段に表示される
+    // 不具合になる。そのため「全般」はここではPL帯に含めず、通常の非PLノードとして
+    // 他の因果連鎖と同列にlayerを計算する。
+    const plSet = new Set(nodeIds.filter(id => {
+      const industry = nodesById.get(id).industry;
+      return !!industry && industry !== '全般';
+    }));
     const nonPlIds = nodeIds.filter(id => !plSet.has(id));
     const plIds = nodeIds.filter(id => plSet.has(id));
 
