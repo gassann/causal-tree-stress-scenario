@@ -564,6 +564,7 @@
     :root:not([data-theme="light"]) .pl-heatmap-value { background: rgba(0,0,0,.55); color: #eef2ef; }
   }
   :root[data-theme="dark"] .pl-heatmap-value { background: rgba(0,0,0,.55); color: #eef2ef; }
+
 </style>
 </head>
 <body>
@@ -3278,22 +3279,29 @@ function setStraightenOn(on) {
     // PLノードを全て入れる（列を非表示にするかどうかの判定は、数値の有無ではなく
     // 「辿り着くかどうか」で行うため。数値が無いだけの場合は列を残して「数値記載なし」
     // というセルを見せたい）。
+    // シナリオスコア（computeExcludeBest）の直接PLエッジ集計と揃えるため、
+    // トリム平均（trimmedMean）と同じフィルタ（迂回路による冗長エッジ・手動非表示・
+    // Step2非表示）を適用する。これにより、このノード単体のPL直接影響の値は
+    // シナリオスコア側の同じノードの値と一致する。
     function computeCellStats(allowedSourceSet) {
-      const stats = new Map(); // nodeId -> {sum, count}
+      const groups = new Map(); // nodeId -> [|増減率%|, ...]
       const reached = new Set(); // 数値の有無に関わらず、対象範囲から辿り着くPLノードid
       DATA_BASE.edges.forEach(e => {
         if (!plNodeSet.has(e.target)) return;
         if (allowedSourceSet && !allowedSourceSet.has(e.source)) return;
         const targetNode = baseNodesById.get(e.target);
         if (targetNode.plPositive !== false) return; // ネガティブな結果ラベルのみ対象
+        if (isRedundantEdge(e.source, e.target)) return; // 迂回路により非表示になっている直接エッジは無いものとして扱う
+        if (isManuallyHiddenNode(targetNode)) return; // 手動で非表示にしたノードは除外後のツリーとして扱う
+        if (isStep2ScoreExcluded(e.target)) return; // Step2ノードを非表示にしている場合は除外後のツリーとして扱う
         reached.add(e.target);
         const pct = parsePct(e.change_pct);
         if (pct == null) return;
-        if (!stats.has(e.target)) stats.set(e.target, { sum: 0, count: 0 });
-        const s = stats.get(e.target);
-        s.sum += Math.abs(pct);
-        s.count += 1;
+        if (!groups.has(e.target)) groups.set(e.target, []);
+        groups.get(e.target).push(Math.abs(pct));
       });
+      const stats = new Map();
+      groups.forEach((vals, nodeId) => { stats.set(nodeId, { avg: trimmedMean(vals), count: vals.length }); });
       return { stats, reached };
     }
 
@@ -3321,7 +3329,7 @@ function setStraightenOn(on) {
     // 色スケールの基準は常にベースラインの最大値に固定する。ホバーのたびにスケールが
     // 変わると色の意味が読み取りにくくなるため。
     let maxAvg = 0;
-    baselineResult.stats.forEach(s => { maxAvg = Math.max(maxAvg, s.sum / s.count); });
+    baselineResult.stats.forEach(s => { maxAvg = Math.max(maxAvg, s.avg); });
     if (maxAvg <= 0) maxAvg = 1;
 
     function colorForValue(avg) {
@@ -3391,13 +3399,13 @@ function setStraightenOn(on) {
           return;
         }
         td.classList.remove('is-empty');
-        const avg = s.sum / s.count;
+        const avg = s.avg;
         td.style.background = colorForValue(avg);
         const valueSpan = document.createElement('span');
         valueSpan.className = 'pl-heatmap-value';
         valueSpan.textContent = avg.toFixed(1) + '%';
         td.appendChild(valueSpan);
-        td.title = `${baseNodesById.get(nodeId).industry} / ${baseNodesById.get(nodeId).label}\n平均${avg.toFixed(1)}%（ネガティブな変動 n=${s.count}件）`;
+        td.title = `${baseNodesById.get(nodeId).industry} / ${baseNodesById.get(nodeId).label}\nトリム平均${avg.toFixed(1)}%（ネガティブな変動 n=${s.count}件）`;
       });
       // 表示中の範囲から辿り着くPLノードが1つも無い列（＝関係の無い列）だけを非表示にする。
       // 辿り着きはするが増減率の数値が無いだけの場合は列を残し、「数値記載なし」セルで示す。
