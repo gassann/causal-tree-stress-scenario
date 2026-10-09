@@ -668,7 +668,7 @@
 
   <section id="causeHeatmapSection">
     <h2>業種 × 最終手前ノード 影響ヒートマップ</h2>
-    <p class="desc">「売上」「営業利益」タグで対象のPL項目（売上高増加/減少・部門売上増加/減少、または営業利益増加/減少・部門営業利益増加/減少）を切り替え、そのPL項目に直接つながるエッジの「原因ノード（PL項目の手前のノード）」を列、業種を行として、変動率(%)のトリム平均を表示します。緑はプラスの影響（増加）、赤はマイナスの影響（減少）。列はホルムズ海峡や表示タグの絞り込みに関わらず、該当する直接エッジが存在する組み合わせを常に全て表示します。</p>
+    <p class="desc">「売上」「営業利益」タグで対象のPL項目（売上高増加/減少・部門売上増加/減少、または営業利益増加/減少・部門営業利益増加/減少）を切り替え、そのPL項目に直接つながるエッジの「原因ノード（PL項目の手前のノード）」を列、業種を行として、変動率(%)のトリム平均を表示します。緑はプラスの影響（増加）、赤はマイナスの影響（減少）。行・列は売上タグと営業利益タグの両方に出てくる組み合わせの和集合で固定され、タグを切り替えても同じ並びのまま（該当しない組み合わせはグレー）。「業種×PL項目」ヒートマップと同じく、迂回路がある直接エッジ・手動非表示ノード・Step2ノード非表示の設定を反映します。</p>
     <div class="filter-row" id="causeHeatmapTagRow"></div>
     <div class="pl-heatmap-wrap" id="causeHeatmapWrap"></div>
   </section>
@@ -3699,9 +3699,10 @@ function setStraightenOn(on) {
   // 「何がそのPL項目を動かしたか」を一覧できるようにするためのもの。ネガティブな変動
   // だけでなくポジティブな変動も扱い、タグで「売上」「営業利益」のどちらを見るかを
   // 切り替える（対象PL項目はそれぞれ4ラベルに限定し、経路上の合成は行わない）。
-  // 常に全データ（ホルムズ海峡に限らず、迂回路・手動非表示・Step2による除外も行わない）
-  // から列を網羅する一覧として表示する（ツリー側の絞り込みタグやノードクリックには
-  // 連動しない）。
+  // 上の「業種×PL項目」ヒートマップと同じ迂回路非表示・手動非表示・Step2非表示の
+  // フィルタを適用する。行・列の並びは売上／営業利益タグで切り替えても変わらない
+  // （両タグ分のデータを合わせた集合を常に使う）よう、タグ切替時は表の作り直しをせず
+  // セルの中身だけを塗り替える。
   (function initCauseHeatmap() {
     const wrap = document.getElementById('causeHeatmapWrap');
     const tagRow = document.getElementById('causeHeatmapTagRow');
@@ -3726,9 +3727,9 @@ function setStraightenOn(on) {
       return Number.isFinite(n) ? n : null;
     }
 
-    // 全データ（DATA_BASE）から、タグ対象のPL項目へ直接つながる全エッジを集計する。
-    // ツリー表示用の迂回路非表示・手動非表示・Step2非表示は、ここでは一切適用しない
-    // （「このPL項目に直接数値が記載されているエッジを漏れなく見る」ための一覧のため）。
+    // 全データ（DATA_BASE）から、タグ対象のPL項目へ直接つながるエッジを集計する。
+    // 上の「業種×PL項目」ヒートマップ（computeCellStats内のisRedundantEdge等）と
+    // 同じフィルタを適用し、ツリー本体の表示ルールと矛盾しないようにする。
     function computeCellStats(tagKey) {
       const signByLabel = TAG_DEFS[tagKey].signByLabel;
       const groups = new Map(); // "industry|sourceId" -> [signed %, ...]
@@ -3738,6 +3739,9 @@ function setStraightenOn(on) {
         if (!t || !t.industry || t.industry === '全般') return;
         const sign = signByLabel[t.label];
         if (sign == null) return;
+        if (isRedundantEdge(e.source, e.target)) return; // 迂回路により非表示になっている直接エッジは無いものとして扱う
+        if (isManuallyHiddenNode(t)) return; // 手動で非表示にしたノードは除外後のツリーとして扱う
+        if (isStep2ScoreExcluded(e.target)) return; // Step2ノードを非表示にしている場合は除外後のツリーとして扱う
         const key = t.industry + '|' + e.source;
         reached.add(key);
         const pct = parsePct(e.change_pct);
@@ -3750,116 +3754,144 @@ function setStraightenOn(on) {
       return { stats, reached };
     }
 
-    let activeTag = 'sales';
-    let maxAbs = 1;
+    const statsByTag = {};
+    Object.keys(TAG_DEFS).forEach(key => { statsByTag[key] = computeCellStats(key); });
 
-    function colorForSignedValue(v) {
-      if (!isFinite(v) || v === 0) return 'var(--surface-alt)';
-      const t = Math.max(0, Math.min(1, Math.abs(v) / maxAbs));
-      const tone = v > 0 ? 'var(--accent)' : 'var(--warn)';
-      return `color-mix(in srgb, ${tone} ${Math.round(t * 100)}%, var(--surface-alt))`;
-    }
-
-    function buildTable(tagKey) {
-      wrap.innerHTML = '';
-
-      const result = computeCellStats(tagKey);
-      const industriesSet = new Set();
-      const sourcesMap = new Map(); // sourceId -> label
-      result.reached.forEach(key => {
+    // 行・列は両タグの集合の和集合で固定する。こうしないと、タグを切り替えるたびに
+    // 列の並び・本数が変わってしまい比較しづらいため。
+    const industriesSet = new Set();
+    const sourcesMap = new Map(); // sourceId -> label
+    Object.keys(statsByTag).forEach(tagKey => {
+      statsByTag[tagKey].reached.forEach(key => {
         const sep = key.indexOf('|');
         const industry = key.slice(0, sep);
         const sourceId = key.slice(sep + 1);
         industriesSet.add(industry);
         if (!sourcesMap.has(sourceId)) sourcesMap.set(sourceId, baseNodesById.get(sourceId).label);
       });
-      if (industriesSet.size === 0 || sourcesMap.size === 0) {
-        wrap.textContent = '対象データがありません。';
-        return;
-      }
-      const industries = Array.from(industriesSet).sort((a, b) => a.localeCompare(b, 'ja'));
-      const industryColor = new Map(industries.map((ind, i) => [ind, NODE_INDUSTRY_PALETTE[i % NODE_INDUSTRY_PALETTE.length]]));
+    });
+    if (industriesSet.size === 0 || sourcesMap.size === 0) {
+      wrap.textContent = '対象データがありません。';
+      return;
+    }
+    const industries = Array.from(industriesSet).sort((a, b) => a.localeCompare(b, 'ja'));
+    const industryColor = new Map(industries.map((ind, i) => [ind, NODE_INDUSTRY_PALETTE[i % NODE_INDUSTRY_PALETTE.length]]));
 
-      // 列の並びは、全データでの影響の大きさ（業種をまたいだ絶対値合計）が大きい順。
-      // それ以外（＝値が1件も無い列）は50音順で後ろに続ける。
-      const sourceIds = Array.from(sourcesMap.keys());
-      const sourceWeight = new Map();
-      sourceIds.forEach(sid => {
-        let total = 0;
+    // 列の並びは、両タグを合わせた影響の大きさ（業種をまたいだ絶対値合計）が大きい順。
+    // タグを切り替えても同じ並びのままにする。
+    const sourceIds = Array.from(sourcesMap.keys());
+    const sourceWeight = new Map();
+    sourceIds.forEach(sid => {
+      let total = 0;
+      Object.keys(statsByTag).forEach(tagKey => {
         industries.forEach(ind => {
-          const s = result.stats.get(ind + '|' + sid);
+          const s = statsByTag[tagKey].stats.get(ind + '|' + sid);
           if (s) total += Math.abs(s.avg);
         });
-        sourceWeight.set(sid, total);
       });
-      sourceIds.sort((a, b) => {
-        const wa = sourceWeight.get(a), wb = sourceWeight.get(b);
-        if (wa !== wb) return wb - wa;
-        return sourcesMap.get(a).localeCompare(sourcesMap.get(b), 'ja');
-      });
+      sourceWeight.set(sid, total);
+    });
+    sourceIds.sort((a, b) => {
+      const wa = sourceWeight.get(a), wb = sourceWeight.get(b);
+      if (wa !== wb) return wb - wa;
+      return sourcesMap.get(a).localeCompare(sourcesMap.get(b), 'ja');
+    });
 
-      maxAbs = 0;
-      result.stats.forEach(s => { maxAbs = Math.max(maxAbs, Math.abs(s.avg)); });
-      if (maxAbs <= 0) maxAbs = 1;
+    // 色の濃淡の基準（maxAbs）はタグごとに別で持つ（営業利益の変動率は売上より
+    // 構造的に大きく出やすく、同じ基準だと売上タグが常に薄くなってしまうため）。
+    const maxAbsByTag = {};
+    Object.keys(statsByTag).forEach(tagKey => {
+      let m = 0;
+      statsByTag[tagKey].stats.forEach(s => { m = Math.max(m, Math.abs(s.avg)); });
+      maxAbsByTag[tagKey] = m > 0 ? m : 1;
+    });
 
-      const table = document.createElement('table');
-      table.className = 'pl-heatmap-table';
-      const thead = document.createElement('thead');
-      const headRow = document.createElement('tr');
-      headRow.appendChild(document.createElement('th'));
-      sourceIds.forEach(sid => {
-        const th = document.createElement('th');
-        th.className = 'pl-heatmap-col-head';
-        th.textContent = sourcesMap.get(sid);
-        headRow.appendChild(th);
-      });
-      thead.appendChild(headRow);
-      table.appendChild(thead);
-
-      const tbody = document.createElement('tbody');
-      industries.forEach(ind => {
-        const tr = document.createElement('tr');
-        const rowTh = document.createElement('th');
-        rowTh.className = 'pl-heatmap-row-head';
-        const swatchColor = industryColor.get(ind) || 'var(--line-strong)';
-        rowTh.innerHTML = `<span class="pl-heatmap-swatch" style="background:${swatchColor}"></span>${escapeHtml(ind)}`;
-        tr.appendChild(rowTh);
-        sourceIds.forEach(sid => {
-          const td = document.createElement('td');
-          td.className = 'pl-heatmap-cell';
-          const key = ind + '|' + sid;
-          const s = result.stats.get(key);
-          if (!result.reached.has(key)) {
-            td.classList.add('is-na');
-          } else if (!s || s.count === 0) {
-            td.classList.add('is-empty');
-            const nodataSpan = document.createElement('span');
-            nodataSpan.className = 'pl-heatmap-nodata';
-            nodataSpan.textContent = '数値記載なし';
-            td.appendChild(nodataSpan);
-            td.title = `${ind} / ${sourcesMap.get(sid)}: 該当データなし`;
-          } else {
-            const avg = s.avg;
-            td.style.background = colorForSignedValue(avg);
-            const valueSpan = document.createElement('span');
-            valueSpan.className = 'pl-heatmap-value';
-            valueSpan.textContent = (avg > 0 ? '+' : '') + avg.toFixed(1) + '%';
-            td.appendChild(valueSpan);
-            td.title = `${ind} / ${sourcesMap.get(sid)}\nトリム平均${avg > 0 ? '+' : ''}${avg.toFixed(1)}%（n=${s.count}件）`;
-          }
-          tr.appendChild(td);
-        });
-        tbody.appendChild(tr);
-      });
-      table.appendChild(tbody);
-
-      const caption = document.createElement('div');
-      caption.className = 'pl-heatmap-caption';
-      caption.textContent = `${TAG_DEFS[tagKey].chipLabel}に直接つながる全エッジを列として表示中（列数${sourceIds.length}・プラスは緑、マイナスは赤。データが無い組み合わせはグレー）`;
-      wrap.appendChild(caption);
-      wrap.appendChild(table);
+    function colorForSignedValue(v, maxAbs) {
+      if (!isFinite(v) || v === 0) return 'var(--surface-alt)';
+      const t = Math.max(0, Math.min(1, Math.abs(v) / maxAbs));
+      const tone = v > 0 ? 'var(--accent)' : 'var(--warn)';
+      return `color-mix(in srgb, ${tone} ${Math.round(t * 100)}%, var(--surface-alt))`;
     }
 
+    const table = document.createElement('table');
+    table.className = 'pl-heatmap-table';
+    const thead = document.createElement('thead');
+    const headRow = document.createElement('tr');
+    headRow.appendChild(document.createElement('th'));
+    sourceIds.forEach(sid => {
+      const th = document.createElement('th');
+      th.className = 'pl-heatmap-col-head';
+      th.textContent = sourcesMap.get(sid);
+      headRow.appendChild(th);
+    });
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+    const cellEls = new Map(); // "industry|sourceId" -> td
+    industries.forEach(ind => {
+      const tr = document.createElement('tr');
+      const rowTh = document.createElement('th');
+      rowTh.className = 'pl-heatmap-row-head';
+      const swatchColor = industryColor.get(ind) || 'var(--line-strong)';
+      rowTh.innerHTML = `<span class="pl-heatmap-swatch" style="background:${swatchColor}"></span>${escapeHtml(ind)}`;
+      tr.appendChild(rowTh);
+      sourceIds.forEach(sid => {
+        const td = document.createElement('td');
+        td.className = 'pl-heatmap-cell';
+        cellEls.set(ind + '|' + sid, td);
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+
+    const caption = document.createElement('div');
+    caption.className = 'pl-heatmap-caption';
+
+    function paint(tagKey) {
+      const result = statsByTag[tagKey];
+      const maxAbs = maxAbsByTag[tagKey];
+      let activeCols = 0;
+      const activeColSet = new Set();
+      cellEls.forEach((td, key) => {
+        td.innerHTML = '';
+        td.className = 'pl-heatmap-cell';
+        td.style.background = '';
+        td.title = '';
+        const s = result.stats.get(key);
+        if (!result.reached.has(key)) {
+          td.classList.add('is-na');
+          return;
+        }
+        const sep = key.indexOf('|');
+        const ind = key.slice(0, sep), sid = key.slice(sep + 1);
+        activeColSet.add(sid);
+        if (!s || s.count === 0) {
+          td.classList.add('is-empty');
+          const nodataSpan = document.createElement('span');
+          nodataSpan.className = 'pl-heatmap-nodata';
+          nodataSpan.textContent = '数値記載なし';
+          td.appendChild(nodataSpan);
+          td.title = `${ind} / ${sourcesMap.get(sid)}: 該当データなし`;
+          return;
+        }
+        const avg = s.avg;
+        td.style.background = colorForSignedValue(avg, maxAbs);
+        const valueSpan = document.createElement('span');
+        valueSpan.className = 'pl-heatmap-value';
+        valueSpan.textContent = (avg > 0 ? '+' : '') + avg.toFixed(1) + '%';
+        td.appendChild(valueSpan);
+        td.title = `${ind} / ${sourcesMap.get(sid)}\nトリム平均${avg > 0 ? '+' : ''}${avg.toFixed(1)}%（n=${s.count}件）`;
+      });
+      activeCols = activeColSet.size;
+      caption.textContent = `${TAG_DEFS[tagKey].chipLabel}に直接つながるエッジを表示中（全${sourceIds.length}列中${activeCols}列が該当・プラスは緑、マイナスは赤。該当しない組み合わせはグレー）`;
+    }
+
+    wrap.appendChild(caption);
+    wrap.appendChild(table);
+
+    let activeTag = 'sales';
     const tagLabelEl = document.createElement('span');
     tagLabelEl.className = 'filter-label';
     tagLabelEl.textContent = 'PL項目';
@@ -3875,13 +3907,13 @@ function setStraightenOn(on) {
         if (activeTag === key) return;
         activeTag = key;
         Object.keys(chips).forEach(k => chips[k].classList.toggle('active', k === activeTag));
-        buildTable(activeTag);
+        paint(activeTag);
       });
       chips[key] = chip;
       tagRow.appendChild(chip);
     });
 
-    buildTable(activeTag);
+    paint(activeTag);
   })();
 
   // ページを開いた時点のデフォルトとして、「ホルムズ海峡封鎖」を中心とした絞り込み表示を
