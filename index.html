@@ -668,7 +668,7 @@
 
   <section id="causeHeatmapSection">
     <h2>業種 × 最終手前ノード 影響ヒートマップ</h2>
-    <p class="desc">「売上」「営業利益」タグで対象のPL項目（売上高増加/減少・部門売上増加/減少、または営業利益増加/減少・部門営業利益増加/減少）を切り替え、そのPL項目に直接つながるエッジの「原因ノード（PL項目の手前のノード）」を列、業種を行として、変動率(%)のトリム平均を表示します。緑はプラスの影響（増加）、赤はマイナスの影響（減少）で、色の濃さは変動率の大きさではなく該当する会社数（裏付けの厚さ）を表します。対象は「ホルムズ海峡封鎖」から辿れる原因ノードのみ。行・列は売上タグと営業利益タグの両方に出てくる組み合わせの和集合で固定され、タグを切り替えても同じ並びのまま（該当しない組み合わせはグレー）。「業種×PL項目」ヒートマップと同じく、迂回路がある直接エッジ・手動非表示ノード・Step2ノード非表示の設定を反映します。</p>
+    <p class="desc">「売上」「営業利益」タグで対象のPL項目（売上高増加/減少・部門売上増加/減少、または営業利益増加/減少・部門営業利益増加/減少）を切り替え、そのPL項目に直接つながるエッジの「原因ノード（PL項目の手前のノード）」を列、業種を行として、変動率(%)のトリム平均を表示します。セル内の数値はプラス（増加）/マイナス（減少）の符号付きで表示しますが、色は単色の濃淡のみで、変動率の大きさではなく該当する会社数（裏付けの厚さ）を表します。対象は「ホルムズ海峡封鎖」から辿れる原因ノードのみ。行・列は売上タグと営業利益タグの両方に出てくる組み合わせの和集合で固定され、タグを切り替えても同じ並びのまま（該当しない組み合わせはグレー）。「業種×PL項目」ヒートマップと同じく、迂回路がある直接エッジ・手動非表示ノード・Step2ノード非表示の設定を反映します。</p>
     <div class="filter-row" id="causeHeatmapTagRow"></div>
     <div class="pl-heatmap-wrap" id="causeHeatmapWrap"></div>
   </section>
@@ -3823,9 +3823,9 @@ function setStraightenOn(on) {
       return sourcesMap.get(a).localeCompare(sourcesMap.get(b), 'ja');
     });
 
-    // 色の濃淡の基準は、値の大きさではなく「該当する会社数」にする（件数の多さ＝
-    // 裏付けの厚さを濃淡で示す）。符号（プラス/マイナス）は変動率の向きのまま使う。
-    // 基準値（maxCompanyCount）はタグごとに別で持つ。
+    // 色の濃淡の基準は「該当する会社数」のみ（件数の多さ＝裏付けの厚さを濃淡で示す）。
+    // プラス/マイナスによる色分けはしない（単色の濃淡のみ）。基準値（maxCompanyCount）
+    // はタグごとに別で持つ。
     const maxCompanyCountByTag = {};
     Object.keys(statsByTag).forEach(tagKey => {
       let m = 0;
@@ -3833,11 +3833,10 @@ function setStraightenOn(on) {
       maxCompanyCountByTag[tagKey] = m > 0 ? m : 1;
     });
 
-    function colorForSignedValue(v, companyCount, maxCompanyCount) {
-      if (!isFinite(v) || v === 0 || !companyCount) return 'var(--surface-alt)';
+    function colorForCompanyCount(companyCount, maxCompanyCount) {
+      if (!companyCount) return 'var(--surface-alt)';
       const t = Math.max(0, Math.min(1, companyCount / maxCompanyCount));
-      const tone = v > 0 ? 'var(--accent)' : 'var(--warn)';
-      return `color-mix(in srgb, ${tone} ${Math.round(t * 100)}%, var(--surface-alt))`;
+      return `color-mix(in srgb, var(--accent) ${Math.round(t * 100)}%, var(--surface-alt))`;
     }
 
     const table = document.createElement('table');
@@ -3904,7 +3903,7 @@ function setStraightenOn(on) {
           return;
         }
         const avg = s.avg;
-        td.style.background = colorForSignedValue(avg, s.companyCount, maxCompanyCount);
+        td.style.background = colorForCompanyCount(s.companyCount, maxCompanyCount);
         const valueSpan = document.createElement('span');
         valueSpan.className = 'pl-heatmap-value';
         valueSpan.textContent = (avg > 0 ? '+' : '') + avg.toFixed(1) + '%';
