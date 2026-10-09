@@ -3908,10 +3908,10 @@ function setStraightenOn(on) {
         valueSpan.className = 'pl-heatmap-value';
         valueSpan.textContent = (avg > 0 ? '+' : '') + avg.toFixed(1) + '%';
         td.appendChild(valueSpan);
-        td.title = `${ind} / ${sourcesMap.get(sid)}\nトリム平均${avg > 0 ? '+' : ''}${avg.toFixed(1)}%（n=${s.count}件・${s.companyCount}社）`;
+        td.title = `${ind} / ${sourcesMap.get(sid)}\nトリム平均${avg > 0 ? '+' : ''}${avg.toFixed(1)}%（${s.companyCount}社）`;
       });
       activeCols = activeColSet.size;
-      caption.textContent = `「ホルムズ海峡封鎖」から辿れる範囲で、${TAG_DEFS[tagKey].chipLabel}に直接つながるエッジを表示中（全${sourceIds.length}列中${activeCols}列が該当・プラスは緑、マイナスは赤。該当しない組み合わせはグレー）`;
+      caption.textContent = `「ホルムズ海峡封鎖」から辿れる範囲で、${TAG_DEFS[tagKey].chipLabel}に直接つながるエッジを表示中（全${sourceIds.length}列中${activeCols}列が該当・色の濃さは該当社数を表す。該当しない組み合わせはグレー）`;
     }
 
     wrap.appendChild(caption);
