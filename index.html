@@ -668,7 +668,7 @@
 
   <section id="causeHeatmapSection">
     <h2>業種 × 最終手前ノード 影響ヒートマップ</h2>
-    <p class="desc">「売上」「営業利益」タグで対象のPL項目（売上高増加/減少・部門売上増加/減少、または営業利益増加/減少・部門営業利益増加/減少）を切り替え、そのPL項目に直接つながるエッジの「原因ノード（PL項目の手前のノード）」を列、業種を行として、変動率(%)のトリム平均を表示します。緑はプラスの影響（増加）、赤はマイナスの影響（減少）。ツリーのノードをクリックすると、そのノードから辿れる列だけに絞り込んで表示します。</p>
+    <p class="desc">「売上」「営業利益」タグで対象のPL項目（売上高増加/減少・部門売上増加/減少、または営業利益増加/減少・部門営業利益増加/減少）を切り替え、そのPL項目に直接つながるエッジの「原因ノード（PL項目の手前のノード）」を列、業種を行として、変動率(%)のトリム平均を表示します。緑はプラスの影響（増加）、赤はマイナスの影響（減少）。列はホルムズ海峡や表示タグの絞り込みに関わらず、該当する直接エッジが存在する組み合わせを常に全て表示します。</p>
     <div class="filter-row" id="causeHeatmapTagRow"></div>
     <div class="pl-heatmap-wrap" id="causeHeatmapWrap"></div>
   </section>
@@ -2932,7 +2932,6 @@ function setStraightenOn(on) {
       g.addEventListener('click', () => {
         if (manualHideMode) { hideNodeManually(id); return; }
         updatePlHeatmap(id);
-        updateCauseHeatmap(id);
         if (isolationMode) {
           if (isolationFocusId === id) { isolationFocusId = null; hideIsolationFocus(); }
           else { isolationFocusId = id; showIsolationFocus(id); }
@@ -3378,7 +3377,7 @@ function setStraightenOn(on) {
     card.addEventListener('mouseenter', evt => showTooltip(evt, e));
     card.addEventListener('mousemove', positionTooltip);
     card.addEventListener('mouseleave', hideTooltip);
-    card.addEventListener('click', () => { updatePlHeatmap(e.source); updateCauseHeatmap(e.source); });
+    card.addEventListener('click', () => updatePlHeatmap(e.source));
     pairGrid.appendChild(card);
     pairCardByEdge.set(e.idx, card);
   });
@@ -3455,7 +3454,6 @@ function setStraightenOn(on) {
   let updatePlHeatmap = function () {}; // ノードのclickから呼ばれる（renderGraphSvg定義より前で使われるため関数式で先に宣言）
   let refreshPlHeatmapSimplify = function () {}; // 「簡略化して表示」チップから呼ばれる（同上の理由で先に宣言）
   let plHeatmapSimplify = false;
-  let updateCauseHeatmap = function () {}; // ノードのclickから呼ばれる（同上の理由で先に宣言）
   (function initPlHeatmap() {
     const wrap = document.getElementById('plHeatmapWrap');
     if (!wrap) return;
@@ -3701,6 +3699,9 @@ function setStraightenOn(on) {
   // 「何がそのPL項目を動かしたか」を一覧できるようにするためのもの。ネガティブな変動
   // だけでなくポジティブな変動も扱い、タグで「売上」「営業利益」のどちらを見るかを
   // 切り替える（対象PL項目はそれぞれ4ラベルに限定し、経路上の合成は行わない）。
+  // 常に全データ（ホルムズ海峡に限らず、迂回路・手動非表示・Step2による除外も行わない）
+  // から列を網羅する一覧として表示する（ツリー側の絞り込みタグやノードクリックには
+  // 連動しない）。
   (function initCauseHeatmap() {
     const wrap = document.getElementById('causeHeatmapWrap');
     const tagRow = document.getElementById('causeHeatmapTagRow');
@@ -3725,36 +3726,18 @@ function setStraightenOn(on) {
       return Number.isFinite(n) ? n : null;
     }
 
-    function computeReachable(startId) {
-      const seen = new Set([startId]);
-      const queue = [startId];
-      let qi = 0;
-      while (qi < queue.length) {
-        const id = queue[qi++];
-        (baseOutAdj.get(id) || []).forEach(e => {
-          if (!seen.has(e.target)) { seen.add(e.target); queue.push(e.target); }
-        });
-      }
-      return seen;
-    }
-
-    // allowedSourceSetがnullなら絞り込みなし（テーブルの行・列の構造＝「全データ上で
-    // そもそも存在する組み合わせか」を決めるために使う）。Setが渡されれば、そのノード群を
-    // 起点に持つ直接エッジだけに絞り込む（ホバー時の再集計、ホルムズ海峡基準のデフォルト
-    // 表示も同じ仕組みで作る）。
-    function computeCellStats(tagKey, allowedSourceSet) {
+    // 全データ（DATA_BASE）から、タグ対象のPL項目へ直接つながる全エッジを集計する。
+    // ツリー表示用の迂回路非表示・手動非表示・Step2非表示は、ここでは一切適用しない
+    // （「このPL項目に直接数値が記載されているエッジを漏れなく見る」ための一覧のため）。
+    function computeCellStats(tagKey) {
       const signByLabel = TAG_DEFS[tagKey].signByLabel;
       const groups = new Map(); // "industry|sourceId" -> [signed %, ...]
-      const reached = new Set(); // 数値の有無に関わらず、対象範囲に存在する組み合わせ
+      const reached = new Set(); // 数値の有無に関わらず、直接エッジが存在する組み合わせ
       DATA_BASE.edges.forEach(e => {
         const t = baseNodesById.get(e.target);
         if (!t || !t.industry || t.industry === '全般') return;
         const sign = signByLabel[t.label];
         if (sign == null) return;
-        if (allowedSourceSet && !allowedSourceSet.has(e.source)) return;
-        if (isRedundantEdge(e.source, e.target)) return; // 迂回路により非表示になっている直接エッジは無いものとして扱う
-        if (isManuallyHiddenNode(t)) return; // 手動で非表示にしたノードは除外後のツリーとして扱う
-        if (isStep2ScoreExcluded(e.target)) return; // Step2ノードを非表示にしている場合は除外後のツリーとして扱う
         const key = t.industry + '|' + e.source;
         reached.add(key);
         const pct = parsePct(e.change_pct);
@@ -3767,17 +3750,7 @@ function setStraightenOn(on) {
       return { stats, reached };
     }
 
-    const DEFAULT_FOCUS_LABEL = 'ホルムズ海峡封鎖';
-    let defaultFocusId = null;
-    baseNodesById.forEach((node, id) => { if (defaultFocusId == null && node.label === DEFAULT_FOCUS_LABEL) defaultFocusId = id; });
-    const defaultReachable = defaultFocusId ? computeReachable(defaultFocusId) : null;
-
     let activeTag = 'sales';
-    let lastFocusId = null;
-    let cellEls = new Map(); // "industry|sourceId" -> td
-    let colTds = new Map(); // sourceId -> [td,...]（列の非表示切り替え用）
-    let colNodeKeys = new Map(); // sourceId -> ["industry|sourceId", ...]（列にデータがあるか判定用）
-    let colHeaderTh = new Map(); // sourceId -> th
     let maxAbs = 1;
 
     function colorForSignedValue(v) {
@@ -3789,15 +3762,11 @@ function setStraightenOn(on) {
 
     function buildTable(tagKey) {
       wrap.innerHTML = '';
-      cellEls = new Map(); colTds = new Map(); colNodeKeys = new Map(); colHeaderTh = new Map();
 
-      // テーブルの行・列の構造は、タグ内であればホバーの有無に関わらず変わらないよう
-      // 常に全データ（DATA_BASE、ホルムズ海峡に限らない）から決める。初期表示や列の
-      // 非表示切替は「reached」（現在の絞り込み範囲内に実在するか）で別途判定する。
-      const structure = computeCellStats(tagKey, null);
+      const result = computeCellStats(tagKey);
       const industriesSet = new Set();
       const sourcesMap = new Map(); // sourceId -> label
-      structure.reached.forEach(key => {
+      result.reached.forEach(key => {
         const sep = key.indexOf('|');
         const industry = key.slice(0, sep);
         const sourceId = key.slice(sep + 1);
@@ -3811,15 +3780,14 @@ function setStraightenOn(on) {
       const industries = Array.from(industriesSet).sort((a, b) => a.localeCompare(b, 'ja'));
       const industryColor = new Map(industries.map((ind, i) => [ind, NODE_INDUSTRY_PALETTE[i % NODE_INDUSTRY_PALETTE.length]]));
 
-      const baselineStats = computeCellStats(tagKey, defaultReachable);
-      // 列の並びは、デフォルト表示（ホルムズ海峡から辿れる範囲）での影響の大きさ
-      // （業種をまたいだ絶対値合計）が大きい順。それ以外は50音順で後ろに続ける。
+      // 列の並びは、全データでの影響の大きさ（業種をまたいだ絶対値合計）が大きい順。
+      // それ以外（＝値が1件も無い列）は50音順で後ろに続ける。
       const sourceIds = Array.from(sourcesMap.keys());
       const sourceWeight = new Map();
       sourceIds.forEach(sid => {
         let total = 0;
         industries.forEach(ind => {
-          const s = baselineStats.stats.get(ind + '|' + sid);
+          const s = result.stats.get(ind + '|' + sid);
           if (s) total += Math.abs(s.avg);
         });
         sourceWeight.set(sid, total);
@@ -3831,7 +3799,7 @@ function setStraightenOn(on) {
       });
 
       maxAbs = 0;
-      baselineStats.stats.forEach(s => { maxAbs = Math.max(maxAbs, Math.abs(s.avg)); });
+      result.stats.forEach(s => { maxAbs = Math.max(maxAbs, Math.abs(s.avg)); });
       if (maxAbs <= 0) maxAbs = 1;
 
       const table = document.createElement('table');
@@ -3844,9 +3812,6 @@ function setStraightenOn(on) {
         th.className = 'pl-heatmap-col-head';
         th.textContent = sourcesMap.get(sid);
         headRow.appendChild(th);
-        colHeaderTh.set(sid, th);
-        colTds.set(sid, []);
-        colNodeKeys.set(sid, industries.map(ind => ind + '|' + sid));
       });
       thead.appendChild(headRow);
       table.appendChild(thead);
@@ -3863,9 +3828,25 @@ function setStraightenOn(on) {
           const td = document.createElement('td');
           td.className = 'pl-heatmap-cell';
           const key = ind + '|' + sid;
-          if (structure.reached.has(key)) cellEls.set(key, td);
-          else td.classList.add('is-na');
-          colTds.get(sid).push(td);
+          const s = result.stats.get(key);
+          if (!result.reached.has(key)) {
+            td.classList.add('is-na');
+          } else if (!s || s.count === 0) {
+            td.classList.add('is-empty');
+            const nodataSpan = document.createElement('span');
+            nodataSpan.className = 'pl-heatmap-nodata';
+            nodataSpan.textContent = '数値記載なし';
+            td.appendChild(nodataSpan);
+            td.title = `${ind} / ${sourcesMap.get(sid)}: 該当データなし`;
+          } else {
+            const avg = s.avg;
+            td.style.background = colorForSignedValue(avg);
+            const valueSpan = document.createElement('span');
+            valueSpan.className = 'pl-heatmap-value';
+            valueSpan.textContent = (avg > 0 ? '+' : '') + avg.toFixed(1) + '%';
+            td.appendChild(valueSpan);
+            td.title = `${ind} / ${sourcesMap.get(sid)}\nトリム平均${avg > 0 ? '+' : ''}${avg.toFixed(1)}%（n=${s.count}件）`;
+          }
           tr.appendChild(td);
         });
         tbody.appendChild(tr);
@@ -3874,57 +3855,9 @@ function setStraightenOn(on) {
 
       const caption = document.createElement('div');
       caption.className = 'pl-heatmap-caption';
+      caption.textContent = `${TAG_DEFS[tagKey].chipLabel}に直接つながる全エッジを列として表示中（列数${sourceIds.length}・プラスは緑、マイナスは赤。データが無い組み合わせはグレー）`;
       wrap.appendChild(caption);
       wrap.appendChild(table);
-
-      function paint(result, isHover, focusId) {
-        const stats = result.stats;
-        const reached = result.reached;
-        cellEls.forEach((td, key) => {
-          const s = stats.get(key);
-          td.innerHTML = '';
-          if (!s || s.count === 0) {
-            td.style.background = '';
-            td.classList.add('is-empty');
-            const nodataSpan = document.createElement('span');
-            nodataSpan.className = 'pl-heatmap-nodata';
-            nodataSpan.textContent = '数値記載なし';
-            td.appendChild(nodataSpan);
-            const sep0 = key.indexOf('|');
-            td.title = `${key.slice(0, sep0)} / ${sourcesMap.get(key.slice(sep0 + 1))}: 該当データなし`;
-            return;
-          }
-          td.classList.remove('is-empty');
-          const avg = s.avg;
-          td.style.background = colorForSignedValue(avg);
-          const valueSpan = document.createElement('span');
-          valueSpan.className = 'pl-heatmap-value';
-          valueSpan.textContent = (avg > 0 ? '+' : '') + avg.toFixed(1) + '%';
-          td.appendChild(valueSpan);
-          const sep = key.indexOf('|');
-          const industry = key.slice(0, sep);
-          const sourceId = key.slice(sep + 1);
-          td.title = `${industry} / ${sourcesMap.get(sourceId)}\nトリム平均${avg > 0 ? '+' : ''}${avg.toFixed(1)}%（n=${s.count}件）`;
-        });
-        sourceIds.forEach(sid => {
-          const hasData = colNodeKeys.get(sid).some(key => reached.has(key));
-          colHeaderTh.get(sid).classList.toggle('is-hidden-col', !hasData);
-          colTds.get(sid).forEach(td => td.classList.toggle('is-hidden-col', !hasData));
-        });
-        const tagLabel = TAG_DEFS[tagKey].chipLabel;
-        caption.textContent = isHover
-          ? `「${baseNodesById.get(focusId).label}」から辿れる列のみ表示（${tagLabel}・プラスは緑、マイナスは赤）`
-          : `「ホルムズ海峡封鎖」から辿れる列を表示中（${tagLabel}・プラスは緑、マイナスは赤。データが無い組み合わせはグレー）`;
-      }
-
-      paint(baselineStats, false);
-
-      updateCauseHeatmap = function (hoverId) {
-        lastFocusId = hoverId;
-        if (!hoverId) { paint(baselineStats, false); return; }
-        const reachable = computeReachable(hoverId);
-        paint(computeCellStats(tagKey, reachable), true, hoverId);
-      };
     }
 
     const tagLabelEl = document.createElement('span');
@@ -3943,7 +3876,6 @@ function setStraightenOn(on) {
         activeTag = key;
         Object.keys(chips).forEach(k => chips[k].classList.toggle('active', k === activeTag));
         buildTable(activeTag);
-        if (lastFocusId) updateCauseHeatmap(lastFocusId);
       });
       chips[key] = chip;
       tagRow.appendChild(chip);
