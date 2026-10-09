@@ -3646,8 +3646,16 @@ function setStraightenOn(on) {
       cellEls.forEach((td, nodeId) => {
         const s = stats.get(nodeId);
         td.innerHTML = '';
+        td.style.background = '';
+        td.classList.remove('is-empty', 'is-na');
+        if (!reached.has(nodeId)) {
+          // 対象範囲（表示中のフォーカス）からそもそも辿れない組み合わせ：
+          // 「数値記載なし」ではなく、ノードが存在しないセルと同じ空欄グレーにする。
+          td.classList.add('is-na');
+          td.title = '';
+          return;
+        }
         if (!s || s.count === 0) {
-          td.style.background = '';
           td.classList.add('is-empty');
           const nodataSpan = document.createElement('span');
           nodataSpan.className = 'pl-heatmap-nodata';
@@ -3656,7 +3664,6 @@ function setStraightenOn(on) {
           td.title = `${baseNodesById.get(nodeId).industry} / ${baseNodesById.get(nodeId).label}: 該当データなし`;
           return;
         }
-        td.classList.remove('is-empty');
         const avg = s.avg;
         td.style.background = colorForValue(avg);
         const valueSpan = document.createElement('span');
