@@ -668,7 +668,7 @@
 
   <section id="causeHeatmapSection">
     <h2>業種 × 最終手前ノード 影響ヒートマップ</h2>
-    <p class="desc">「売上」「営業利益」タグで対象のPL項目（売上高増加/減少・部門売上増加/減少、または営業利益増加/減少・部門営業利益増加/減少）を切り替え、そのPL項目に直接つながるエッジの「原因ノード（PL項目の手前のノード）」を列、業種を行として、変動率(%)のトリム平均を表示します。緑はプラスの影響（増加）、赤はマイナスの影響（減少）。対象は「ホルムズ海峡封鎖」から辿れる原因ノードのみ。行・列は売上タグと営業利益タグの両方に出てくる組み合わせの和集合で固定され、タグを切り替えても同じ並びのまま（該当しない組み合わせはグレー）。「業種×PL項目」ヒートマップと同じく、迂回路がある直接エッジ・手動非表示ノード・Step2ノード非表示の設定を反映します。</p>
+    <p class="desc">「売上」「営業利益」タグで対象のPL項目（売上高増加/減少・部門売上増加/減少、または営業利益増加/減少・部門営業利益増加/減少）を切り替え、そのPL項目に直接つながるエッジの「原因ノード（PL項目の手前のノード）」を列、業種を行として、変動率(%)のトリム平均を表示します。緑はプラスの影響（増加）、赤はマイナスの影響（減少）で、色の濃さは変動率の大きさではなく該当する会社数（裏付けの厚さ）を表します。対象は「ホルムズ海峡封鎖」から辿れる原因ノードのみ。行・列は売上タグと営業利益タグの両方に出てくる組み合わせの和集合で固定され、タグを切り替えても同じ並びのまま（該当しない組み合わせはグレー）。「業種×PL項目」ヒートマップと同じく、迂回路がある直接エッジ・手動非表示ノード・Step2ノード非表示の設定を反映します。</p>
     <div class="filter-row" id="causeHeatmapTagRow"></div>
     <div class="pl-heatmap-wrap" id="causeHeatmapWrap"></div>
   </section>
@@ -3753,6 +3753,7 @@ function setStraightenOn(on) {
     function computeCellStats(tagKey) {
       const signByLabel = TAG_DEFS[tagKey].signByLabel;
       const groups = new Map(); // "industry|sourceId" -> [signed %, ...]
+      const companies = new Map(); // "industry|sourceId" -> Set(会社名)（色の濃さはこちらの件数を使う）
       const reached = new Set(); // 数値の有無に関わらず、直接エッジが存在する組み合わせ
       DATA_BASE.edges.forEach(e => {
         if (hormuzReachable && !hormuzReachable.has(e.source)) return;
@@ -3769,9 +3770,13 @@ function setStraightenOn(on) {
         if (pct == null) return;
         if (!groups.has(key)) groups.set(key, []);
         groups.get(key).push(sign * Math.abs(pct));
+        if (!companies.has(key)) companies.set(key, new Set());
+        if (e.company) companies.get(key).add(e.company);
       });
       const stats = new Map();
-      groups.forEach((vals, key) => { stats.set(key, { avg: trimmedMean(vals), count: vals.length }); });
+      groups.forEach((vals, key) => {
+        stats.set(key, { avg: trimmedMean(vals), count: vals.length, companyCount: (companies.get(key) || new Set()).size });
+      });
       return { stats, reached };
     }
 
@@ -3818,18 +3823,19 @@ function setStraightenOn(on) {
       return sourcesMap.get(a).localeCompare(sourcesMap.get(b), 'ja');
     });
 
-    // 色の濃淡の基準（maxAbs）はタグごとに別で持つ（営業利益の変動率は売上より
-    // 構造的に大きく出やすく、同じ基準だと売上タグが常に薄くなってしまうため）。
-    const maxAbsByTag = {};
+    // 色の濃淡の基準は、値の大きさではなく「該当する会社数」にする（件数の多さ＝
+    // 裏付けの厚さを濃淡で示す）。符号（プラス/マイナス）は変動率の向きのまま使う。
+    // 基準値（maxCompanyCount）はタグごとに別で持つ。
+    const maxCompanyCountByTag = {};
     Object.keys(statsByTag).forEach(tagKey => {
       let m = 0;
-      statsByTag[tagKey].stats.forEach(s => { m = Math.max(m, Math.abs(s.avg)); });
-      maxAbsByTag[tagKey] = m > 0 ? m : 1;
+      statsByTag[tagKey].stats.forEach(s => { m = Math.max(m, s.companyCount); });
+      maxCompanyCountByTag[tagKey] = m > 0 ? m : 1;
     });
 
-    function colorForSignedValue(v, maxAbs) {
-      if (!isFinite(v) || v === 0) return 'var(--surface-alt)';
-      const t = Math.max(0, Math.min(1, Math.abs(v) / maxAbs));
+    function colorForSignedValue(v, companyCount, maxCompanyCount) {
+      if (!isFinite(v) || v === 0 || !companyCount) return 'var(--surface-alt)';
+      const t = Math.max(0, Math.min(1, companyCount / maxCompanyCount));
       const tone = v > 0 ? 'var(--accent)' : 'var(--warn)';
       return `color-mix(in srgb, ${tone} ${Math.round(t * 100)}%, var(--surface-alt))`;
     }
@@ -3872,7 +3878,7 @@ function setStraightenOn(on) {
 
     function paint(tagKey) {
       const result = statsByTag[tagKey];
-      const maxAbs = maxAbsByTag[tagKey];
+      const maxCompanyCount = maxCompanyCountByTag[tagKey];
       let activeCols = 0;
       const activeColSet = new Set();
       cellEls.forEach((td, key) => {
@@ -3898,12 +3904,12 @@ function setStraightenOn(on) {
           return;
         }
         const avg = s.avg;
-        td.style.background = colorForSignedValue(avg, maxAbs);
+        td.style.background = colorForSignedValue(avg, s.companyCount, maxCompanyCount);
         const valueSpan = document.createElement('span');
         valueSpan.className = 'pl-heatmap-value';
         valueSpan.textContent = (avg > 0 ? '+' : '') + avg.toFixed(1) + '%';
         td.appendChild(valueSpan);
-        td.title = `${ind} / ${sourcesMap.get(sid)}\nトリム平均${avg > 0 ? '+' : ''}${avg.toFixed(1)}%（n=${s.count}件）`;
+        td.title = `${ind} / ${sourcesMap.get(sid)}\nトリム平均${avg > 0 ? '+' : ''}${avg.toFixed(1)}%（n=${s.count}件・${s.companyCount}社）`;
       });
       activeCols = activeColSet.size;
       caption.textContent = `「ホルムズ海峡封鎖」から辿れる範囲で、${TAG_DEFS[tagKey].chipLabel}に直接つながるエッジを表示中（全${sourceIds.length}列中${activeCols}列が該当・プラスは緑、マイナスは赤。該当しない組み合わせはグレー）`;
