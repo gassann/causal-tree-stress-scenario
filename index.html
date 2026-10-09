@@ -668,7 +668,7 @@
 
   <section id="causeHeatmapSection">
     <h2>業種 × 最終手前ノード 影響ヒートマップ</h2>
-    <p class="desc">「売上」「営業利益」タグで対象のPL項目（売上高増加/減少・部門売上増加/減少、または営業利益増加/減少・部門営業利益増加/減少）を切り替え、そのPL項目に直接つながるエッジの「原因ノード（PL項目の手前のノード）」を列、業種を行として、変動率(%)のトリム平均を表示します。緑はプラスの影響（増加）、赤はマイナスの影響（減少）。行・列は売上タグと営業利益タグの両方に出てくる組み合わせの和集合で固定され、タグを切り替えても同じ並びのまま（該当しない組み合わせはグレー）。「業種×PL項目」ヒートマップと同じく、迂回路がある直接エッジ・手動非表示ノード・Step2ノード非表示の設定を反映します。</p>
+    <p class="desc">「売上」「営業利益」タグで対象のPL項目（売上高増加/減少・部門売上増加/減少、または営業利益増加/減少・部門営業利益増加/減少）を切り替え、そのPL項目に直接つながるエッジの「原因ノード（PL項目の手前のノード）」を列、業種を行として、変動率(%)のトリム平均を表示します。緑はプラスの影響（増加）、赤はマイナスの影響（減少）。対象は「ホルムズ海峡封鎖」から辿れる原因ノードのみ。行・列は売上タグと営業利益タグの両方に出てくる組み合わせの和集合で固定され、タグを切り替えても同じ並びのまま（該当しない組み合わせはグレー）。「業種×PL項目」ヒートマップと同じく、迂回路がある直接エッジ・手動非表示ノード・Step2ノード非表示の設定を反映します。</p>
     <div class="filter-row" id="causeHeatmapTagRow"></div>
     <div class="pl-heatmap-wrap" id="causeHeatmapWrap"></div>
   </section>
@@ -3727,14 +3727,35 @@ function setStraightenOn(on) {
       return Number.isFinite(n) ? n : null;
     }
 
-    // 全データ（DATA_BASE）から、タグ対象のPL項目へ直接つながるエッジを集計する。
-    // 上の「業種×PL項目」ヒートマップ（computeCellStats内のisRedundantEdge等）と
-    // 同じフィルタを適用し、ツリー本体の表示ルールと矛盾しないようにする。
+    // 「ホルムズ海峡封鎖」から辿れるノードだけを対象にする（他の円安・インフレ・
+    // コロナ関連など無関係なシナリオチェーンの原因ノードが列に出てこないようにする
+    // ため）。上の「業種×PL項目」ヒートマップの初期表示と同じ起点・同じ辿り方。
+    function computeReachable(startId) {
+      const seen = new Set([startId]);
+      const queue = [startId];
+      let qi = 0;
+      while (qi < queue.length) {
+        const id = queue[qi++];
+        (baseOutAdj.get(id) || []).forEach(e => {
+          if (!seen.has(e.target)) { seen.add(e.target); queue.push(e.target); }
+        });
+      }
+      return seen;
+    }
+    const HORMUZ_FOCUS_LABEL = 'ホルムズ海峡封鎖';
+    let hormuzFocusId = null;
+    baseNodesById.forEach((node, id) => { if (hormuzFocusId == null && node.label === HORMUZ_FOCUS_LABEL) hormuzFocusId = id; });
+    const hormuzReachable = hormuzFocusId ? computeReachable(hormuzFocusId) : null;
+
+    // ホルムズ海峡から辿れる範囲に絞った上で、タグ対象のPL項目へ直接つながるエッジを
+    // 集計する。上の「業種×PL項目」ヒートマップ（computeCellStats内のisRedundantEdge等）
+    // と同じフィルタを適用し、ツリー本体の表示ルールと矛盾しないようにする。
     function computeCellStats(tagKey) {
       const signByLabel = TAG_DEFS[tagKey].signByLabel;
       const groups = new Map(); // "industry|sourceId" -> [signed %, ...]
       const reached = new Set(); // 数値の有無に関わらず、直接エッジが存在する組み合わせ
       DATA_BASE.edges.forEach(e => {
+        if (hormuzReachable && !hormuzReachable.has(e.source)) return;
         const t = baseNodesById.get(e.target);
         if (!t || !t.industry || t.industry === '全般') return;
         const sign = signByLabel[t.label];
@@ -3885,7 +3906,7 @@ function setStraightenOn(on) {
         td.title = `${ind} / ${sourcesMap.get(sid)}\nトリム平均${avg > 0 ? '+' : ''}${avg.toFixed(1)}%（n=${s.count}件）`;
       });
       activeCols = activeColSet.size;
-      caption.textContent = `${TAG_DEFS[tagKey].chipLabel}に直接つながるエッジを表示中（全${sourceIds.length}列中${activeCols}列が該当・プラスは緑、マイナスは赤。該当しない組み合わせはグレー）`;
+      caption.textContent = `「ホルムズ海峡封鎖」から辿れる範囲で、${TAG_DEFS[tagKey].chipLabel}に直接つながるエッジを表示中（全${sourceIds.length}列中${activeCols}列が該当・プラスは緑、マイナスは赤。該当しない組み合わせはグレー）`;
     }
 
     wrap.appendChild(caption);
