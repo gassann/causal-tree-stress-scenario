@@ -370,6 +370,32 @@
   .rm-chip-group { display: inline-flex; align-items: center; gap: 2px; }
   .risk-matrix-actions { margin-top: 10px; }
 
+  .edge-prob-wrap { margin-top: 4px; }
+  .edge-prob-title { font-size: 12px; font-weight: 700; color: var(--ink-muted); margin-bottom: 8px; }
+  .edge-prob-list { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-start; }
+  .edge-prob-col { flex: 1 1 170px; min-width: 170px; max-width: 260px; }
+  .edge-prob-colhead {
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; color: var(--ink-muted); font-family: "JetBrains Mono", monospace;
+    font-size: 11px; padding: 4px; text-align: center; white-space: pre-line;
+  }
+  .edge-prob-cell {
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 5px;
+    min-height: 60px;
+    display: flex; flex-direction: column; gap: 4px;
+    transition: border-color .1s ease, box-shadow .1s ease;
+  }
+  .edge-prob-cell.drag-over { border-color: var(--accent); box-shadow: inset 0 0 0 2px var(--accent); }
+  .edge-prob-chip {
+    background: var(--surface); border: 1px solid var(--line-strong); border-radius: 5px;
+    padding: 3px 6px; font-size: 10.5px; color: var(--ink); cursor: grab; line-height: 1.4;
+  }
+  .edge-prob-chip:active { cursor: grabbing; }
+  .edge-prob-chip:hover { border-color: var(--accent); color: var(--accent-ink); }
+  .edge-prob-actions { margin-top: 10px; }
+
   .edge-hit { fill: none; stroke: transparent; stroke-width: 14; cursor: pointer; }
   .edge-line { fill: none; stroke: var(--line-strong); stroke-width: 1.6; marker-end: url(#arrow); transition: opacity .15s ease, stroke .12s ease, stroke-width .12s ease; }
   .edge-group:hover .edge-line { stroke: var(--warn); }
@@ -613,9 +639,11 @@
     <div class="view-tabs" id="isolationViewTabs" style="display:none;">
       <span class="chip active" data-view="tree">ツリー</span>
       <span class="chip" data-view="matrix">マトリクス</span>
+      <span class="chip" data-view="edgeprob">エッジ蓋然性</span>
     </div>
     <div class="isolation-svg-wrap" id="isolationSvgWrap"></div>
     <div class="risk-matrix-wrap" id="isolationMatrixWrap" style="display:none;"></div>
+    <div class="edge-prob-wrap" id="isolationEdgeProbWrap" style="display:none;"></div>
   </section>
 
   <main>
@@ -1403,9 +1431,10 @@ function setStraightenOn(on) {
     chip.addEventListener('click', () => {
       document.querySelectorAll('#isolationViewTabs .chip').forEach(c => c.classList.remove('active'));
       chip.classList.add('active');
-      const showMatrix = chip.dataset.view === 'matrix';
-      document.getElementById('isolationSvgWrap').style.display = showMatrix ? 'none' : '';
-      document.getElementById('isolationMatrixWrap').style.display = showMatrix ? '' : 'none';
+      const view = chip.dataset.view;
+      document.getElementById('isolationSvgWrap').style.display = view === 'tree' ? '' : 'none';
+      document.getElementById('isolationMatrixWrap').style.display = view === 'matrix' ? '' : 'none';
+      document.getElementById('isolationEdgeProbWrap').style.display = view === 'edgeprob' ? '' : 'none';
     });
   });
 
@@ -2950,6 +2979,30 @@ function setStraightenOn(on) {
     a.remove();
     URL.revokeObjectURL(url);
   }
+  function exportEdgeProbsCsv() {
+    const rows = [['原因ラベル', '原因業種', '結果ラベル', '結果業種', '蓋然性(1-4)', '蓋然性根拠']];
+    const seen = new Set();
+    nodesById.forEach(node => {
+      node.out.forEach(e => {
+        if (e.probability == null) return;
+        const key = e.source + '|' + e.target;
+        if (seen.has(key)) return;
+        seen.add(key);
+        const s = nodesById.get(e.source), t = nodesById.get(e.target);
+        rows.push([s.label, s.industry || '', t.label, t.industry || '', e.probability, e.probabilityReason || '']);
+      });
+    });
+    const csv = '﻿' + rows.map(r => r.map(csvEscape).join(',')).join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'ホルムズ海峡封鎖_エッジ蓋然性.csv';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
 
 
   // スコア付きノードの誘導部分グラフにおける根（スコア付きの入力エッジを持たないスコア付き
@@ -3071,6 +3124,115 @@ function setStraightenOn(on) {
     matrixRegistry.forEach((nodeIds, containerEl) => renderMatrixInto(containerEl, nodeIds));
   }
 
+  // ---- edge probability editor (below whichever tree is currently in view) ----
+  // 影響度×蓋然性マトリクスはノード単位（影響度・蓋然性の2軸）だが、エッジ基準の蓋然性には
+  // 対になる「エッジの影響度」が存在しないため2軸のマトリクスにはできない。代わりに蓋然性
+  // (1-4)＋未設定の5列に原因→結果のエッジを振り分ける1軸のリストとして編集する。
+  // PL/BS勘定科目に繋がるエッジ（結果が確定事象）は対象外（このノード一覧・対象の考え方は
+  // computeExcludeBest/edgeProbabilityWeightと揃える）。ここでの編集もセッション限りで、
+  // CSVダウンロード→元ファイルへの手動置き換えが必要な点は影響度・蓋然性マトリクスと同じ。
+  let draggedEdgePairKey = null;
+  const edgeProbRegistry = new Map(); // containerEl -> nodeIds, for in-place refresh after an edit
+  function renderEdgeProbInto(containerEl, nodeIds) {
+    containerEl.innerHTML = '';
+    const idSet = new Set(nodeIds);
+    const scoredSet = new Set(nodeIds.filter(id => nodesById.get(id).impact != null));
+    const pairs = new Map(); // "source|target" -> [edge,...]（重複行は1本にまとめて一括編集する）
+    scoredSet.forEach(id => {
+      nodesById.get(id).out.forEach(e => {
+        if (e.source === e.target) return;
+        if (!idSet.has(e.target) || !scoredSet.has(e.target)) return;
+        if (nodesById.get(e.target).industry) return; // PL/BS勘定科目は対象外
+        const key = e.source + '|' + e.target;
+        if (!pairs.has(key)) pairs.set(key, []);
+        pairs.get(key).push(e);
+      });
+    });
+    if (pairs.size === 0) { edgeProbRegistry.delete(containerEl); return false; }
+    edgeProbRegistry.set(containerEl, nodeIds);
+
+    const title = document.createElement('div');
+    title.className = 'edge-prob-title';
+    title.textContent = `因果エッジの蓋然性（${pairs.size}本・試験版）`;
+    containerEl.appendChild(title);
+
+    const buckets = [
+      { key: 'unset', label: '未設定\n（1.0相当）' },
+      { key: 1, label: '蓋然性1' },
+      { key: 2, label: '蓋然性2' },
+      { key: 3, label: '蓋然性3' },
+      { key: 4, label: '蓋然性4' },
+    ];
+    const byBucket = new Map(buckets.map(b => [b.key, []]));
+    pairs.forEach((edgeList, key) => {
+      const p = edgeList[0].probability;
+      const bucketKey = (p != null && byBucket.has(Math.round(p))) ? Math.round(p) : 'unset';
+      byBucket.get(bucketKey).push({ key, edgeList });
+    });
+
+    const list = document.createElement('div');
+    list.className = 'edge-prob-list';
+    buckets.forEach(b => {
+      const col = document.createElement('div');
+      col.className = 'edge-prob-col';
+      const head = document.createElement('div');
+      head.className = 'edge-prob-colhead';
+      head.textContent = b.label;
+      col.appendChild(head);
+      const cell = document.createElement('div');
+      cell.className = 'edge-prob-cell';
+      cell.dataset.bucket = b.key;
+      cell.addEventListener('dragover', evt => { evt.preventDefault(); cell.classList.add('drag-over'); });
+      cell.addEventListener('dragleave', () => cell.classList.remove('drag-over'));
+      cell.addEventListener('drop', evt => {
+        evt.preventDefault();
+        cell.classList.remove('drag-over');
+        const pairKey = evt.dataTransfer.getData('text/plain') || draggedEdgePairKey;
+        if (!pairKey || !pairs.has(pairKey)) return;
+        const newVal = b.key === 'unset' ? null : b.key;
+        pairs.get(pairKey).forEach(e => { e.probability = newVal; });
+        draggedEdgePairKey = null;
+        invalidateExcludeScoreCache();
+        refreshAllEdgeProbViews();
+        if (scenariosShown) applyScenarioDisplay();
+      });
+      (byBucket.get(b.key) || []).forEach(({ key, edgeList }) => {
+        const e0 = edgeList[0];
+        const chip = document.createElement('span');
+        chip.className = 'edge-prob-chip';
+        chip.draggable = true;
+        chip.textContent = `${nodesById.get(e0.source).label} → ${nodesById.get(e0.target).label}`;
+        chip.title = e0.probabilityReason
+          ? `【蓋然性${e0.probability}の根拠】\n${e0.probabilityReason}`
+          : 'ドラッグして蓋然性を変更できます（未設定は1.0扱い）';
+        chip.addEventListener('dragstart', evt => {
+          draggedEdgePairKey = key;
+          evt.dataTransfer.setData('text/plain', key);
+          evt.dataTransfer.effectAllowed = 'move';
+        });
+        chip.addEventListener('click', () => jumpToNode(e0.target));
+        cell.appendChild(chip);
+      });
+      col.appendChild(cell);
+      list.appendChild(col);
+    });
+    containerEl.appendChild(list);
+
+    const actions = document.createElement('div');
+    actions.className = 'edge-prob-actions';
+    const dlChip = document.createElement('span');
+    dlChip.className = 'chip';
+    dlChip.textContent = '変更をCSVとしてダウンロード';
+    dlChip.title = '現在のエッジ蓋然性の値（このセッション中の編集を含む）をCSVとして書き出します。ダウンロード後、プロジェクト内の元ファイルに手動で置き換えてください。';
+    dlChip.addEventListener('click', exportEdgeProbsCsv);
+    actions.appendChild(dlChip);
+    containerEl.appendChild(actions);
+    return true;
+  }
+  function refreshAllEdgeProbViews() {
+    edgeProbRegistry.forEach((nodeIds, containerEl) => renderEdgeProbInto(containerEl, nodeIds));
+  }
+
   function buildTreeCard(root) {
     const nodeIds = compNodes.get(root);
     const edgeList = compEdges.get(root);
@@ -3090,30 +3252,54 @@ function setStraightenOn(on) {
     matrixContainer.className = 'risk-matrix-wrap';
     matrixContainer.style.display = 'none';
     const hasMatrix = renderMatrixInto(matrixContainer, nodeIds);
+    const edgeProbContainer = document.createElement('div');
+    edgeProbContainer.className = 'edge-prob-wrap';
+    edgeProbContainer.style.display = 'none';
+    const hasEdgeProb = renderEdgeProbInto(edgeProbContainer, nodeIds);
 
-    if (hasMatrix) {
+    if (hasMatrix || hasEdgeProb) {
       const tabs = document.createElement('div');
       tabs.className = 'view-tabs';
       const treeTab = document.createElement('span');
       treeTab.className = 'chip active';
       treeTab.textContent = 'ツリー';
-      const matrixTab = document.createElement('span');
-      matrixTab.className = 'chip';
-      matrixTab.textContent = 'マトリクス';
+      const containers = [svgContainer, matrixContainer, edgeProbContainer];
+      function showOnly(active) {
+        containers.forEach(c => { c.style.display = c === active ? '' : 'none'; });
+      }
       treeTab.addEventListener('click', () => {
-        treeTab.classList.add('active'); matrixTab.classList.remove('active');
-        svgContainer.style.display = ''; matrixContainer.style.display = 'none';
-      });
-      matrixTab.addEventListener('click', () => {
-        matrixTab.classList.add('active'); treeTab.classList.remove('active');
-        matrixContainer.style.display = ''; svgContainer.style.display = 'none';
+        tabs.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+        treeTab.classList.add('active');
+        showOnly(svgContainer);
       });
       tabs.appendChild(treeTab);
-      tabs.appendChild(matrixTab);
+      if (hasMatrix) {
+        const matrixTab = document.createElement('span');
+        matrixTab.className = 'chip';
+        matrixTab.textContent = 'マトリクス';
+        matrixTab.addEventListener('click', () => {
+          tabs.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+          matrixTab.classList.add('active');
+          showOnly(matrixContainer);
+        });
+        tabs.appendChild(matrixTab);
+      }
+      if (hasEdgeProb) {
+        const edgeProbTab = document.createElement('span');
+        edgeProbTab.className = 'chip';
+        edgeProbTab.textContent = 'エッジ蓋然性';
+        edgeProbTab.addEventListener('click', () => {
+          tabs.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+          edgeProbTab.classList.add('active');
+          showOnly(edgeProbContainer);
+        });
+        tabs.appendChild(edgeProbTab);
+      }
       card.appendChild(tabs);
     }
     card.appendChild(svgContainer);
     card.appendChild(matrixContainer);
+    card.appendChild(edgeProbContainer);
     document.getElementById('treeGallery').appendChild(card);
     return card;
   }
@@ -3140,13 +3326,18 @@ function setStraightenOn(on) {
     document.querySelector('main').style.display = 'none';
     highlightScenariosIn(wrap, scenariosShown ? currentScenarios : null);
     const isoMatrixWrap = document.getElementById('isolationMatrixWrap');
+    const isoEdgeProbWrap = document.getElementById('isolationEdgeProbWrap');
     const isoTabs = document.getElementById('isolationViewTabs');
     const hasMatrix = renderMatrixInto(isoMatrixWrap, isoNodeIds);
-    isoTabs.style.display = hasMatrix ? '' : 'none';
+    const hasEdgeProb = renderEdgeProbInto(isoEdgeProbWrap, isoNodeIds);
+    isoTabs.style.display = (hasMatrix || hasEdgeProb) ? '' : 'none';
+    isoTabs.querySelector('[data-view="matrix"]').style.display = hasMatrix ? '' : 'none';
+    isoTabs.querySelector('[data-view="edgeprob"]').style.display = hasEdgeProb ? '' : 'none';
     // default back to the tree view each time a new node is focused
     isoTabs.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c.dataset.view === 'tree'));
     wrap.style.display = '';
     isoMatrixWrap.style.display = 'none';
+    isoEdgeProbWrap.style.display = 'none';
   }
   function hideIsolationFocus() {
     document.getElementById('isolationPanel').style.display = 'none';
