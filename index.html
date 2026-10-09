@@ -571,6 +571,7 @@
     display: flex; align-items: center; justify-content: flex-end; gap: 5px;
   }
   .pl-heatmap-swatch { width: 8px; height: 8px; border-radius: 2px; flex: none; display: inline-block; }
+  .pl-heatmap-row-company-count { font-weight: 400; color: var(--ink-muted); font-size: 9.5px; }
   .pl-heatmap-cell {
     width: 46px; height: 30px; border-radius: 4px; text-align: center; vertical-align: middle;
     transition: background .15s ease;
@@ -668,7 +669,7 @@
 
   <section id="causeHeatmapSection">
     <h2>業種 × 最終手前ノード 影響ヒートマップ</h2>
-    <p class="desc">「売上」「営業利益」「その他」タグで対象のPL項目（売上高増加/減少・部門売上増加/減少、営業利益増加/減少・部門営業利益増加/減少、または売上原価・売上総利益・経常利益・当期純利益・部門／地域利益など売上・営業利益以外の一般的なPL項目）を切り替え、そのPL項目に直接つながるエッジの「原因ノード（PL項目の手前のノード）」を列、業種を行として、変動率(%)のトリム平均を表示します。セル内の数値はプラス（増加）/マイナス（減少）の符号付きで表示しますが、色は単色の濃淡のみで、変動率の大きさではなく該当する会社数（裏付けの厚さ）を表します。対象は「ホルムズ海峡封鎖」から辿れる原因ノードのみ。行・列は3つのタグすべてに出てくる組み合わせの和集合で固定され、タグを切り替えても同じ並びのまま（該当しない組み合わせはグレー）。「業種×PL項目」ヒートマップと同じく、迂回路がある直接エッジ・手動非表示ノード・Step2ノード非表示の設定を反映します。</p>
+    <p class="desc">「売上」「営業利益」「その他」タグで対象のPL項目（売上高増加/減少・部門売上増加/減少、営業利益増加/減少・部門営業利益増加/減少、または売上原価・売上総利益・経常利益・当期純利益・部門／地域利益など売上・営業利益以外の一般的なPL項目）を切り替え、そのPL項目に直接つながるエッジの「原因ノード（PL項目の手前のノード）」を列、業種を行として、変動率(%)のトリム平均を表示します。セル内の数値はプラス（増加）/マイナス（減少）の符号付きで表示しますが、色は単色の濃淡のみで、変動率の大きさではなく該当する会社数（裏付けの厚さ）を表します。業種の行見出しには、そのヒートマップに実際に出てくる会社数も表示します。対象は「ホルムズ海峡封鎖」から辿れる原因ノードのみ。全業種・全タグを通してプラス方向にしかならない原因ノード（例:「賃料水準の上昇」が不動産業の増益にしか繋がらない場合）は列から除外します。行・列は3つのタグすべてに出てくる組み合わせの和集合で固定され、タグを切り替えても同じ並びのまま（該当しない組み合わせはグレー）。「業種×PL項目」ヒートマップと同じく、迂回路がある直接エッジ・手動非表示ノード・Step2ノード非表示の設定を反映します。</p>
     <div class="filter-row" id="causeHeatmapTagRow"></div>
     <div class="pl-heatmap-wrap" id="causeHeatmapWrap"></div>
   </section>
@@ -3788,6 +3789,7 @@ function setStraightenOn(on) {
       const groups = new Map(); // "industry|sourceId" -> [signed %, ...]
       const companies = new Map(); // "industry|sourceId" -> Set(会社名)（色の濃さはこちらの件数を使う）
       const reached = new Set(); // 数値の有無に関わらず、直接エッジが存在する組み合わせ
+      const sourceSign = new Map(); // sourceId -> { pos, neg }（増減率の数値が無いエッジも含めた符号の有無）
       DATA_BASE.edges.forEach(e => {
         if (hormuzReachable && !hormuzReachable.has(e.source)) return;
         const t = baseNodesById.get(e.target);
@@ -3799,6 +3801,9 @@ function setStraightenOn(on) {
         if (isStep2ScoreExcluded(e.target)) return; // Step2ノードを非表示にしている場合は除外後のツリーとして扱う
         const key = t.industry + '|' + e.source;
         reached.add(key);
+        if (!sourceSign.has(e.source)) sourceSign.set(e.source, { pos: false, neg: false });
+        const ss = sourceSign.get(e.source);
+        if (sign > 0) ss.pos = true; else if (sign < 0) ss.neg = true;
         const pct = parsePct(e.change_pct);
         if (pct == null) return;
         if (!groups.has(key)) groups.set(key, []);
@@ -3810,7 +3815,7 @@ function setStraightenOn(on) {
       groups.forEach((vals, key) => {
         stats.set(key, { avg: trimmedMean(vals), count: vals.length, companyCount: (companies.get(key) || new Set()).size });
       });
-      return { stats, reached };
+      return { stats, reached, sourceSign };
     }
 
     const statsByTag = {};
@@ -3829,6 +3834,31 @@ function setStraightenOn(on) {
         if (!sourcesMap.has(sourceId)) sourcesMap.set(sourceId, baseNodesById.get(sourceId).label);
       });
     });
+
+    // 全業種・全タグを通してプラス方向にしかならないノード（例:「賃料水準の上昇」が
+    // 不動産業の増益にしか繋がらない場合）は、リスク（ネガティブ影響）を見るための
+    // ヒートマップとして価値が低いため列から除外する。マイナス方向が一度でもあれば残す。
+    // 増減率(%)の数値が記載されていないエッジでも、繋がる先のPL項目の符号（plPositive）
+    //自体は判定できるため、数値の有無に関わらずsourceSignを見て判定する。
+    const sourceHasPositive = new Map();
+    const sourceHasNegative = new Map();
+    Object.keys(statsByTag).forEach(tagKey => {
+      statsByTag[tagKey].sourceSign.forEach((ss, sid) => {
+        if (ss.pos) sourceHasPositive.set(sid, true);
+        if (ss.neg) sourceHasNegative.set(sid, true);
+      });
+    });
+    sourceHasPositive.forEach((_, sid) => {
+      if (!sourceHasNegative.get(sid)) sourcesMap.delete(sid);
+    });
+    // 列が無くなった業種（行）は表示しない。
+    Array.from(industriesSet).forEach(ind => {
+      const hasColumn = Array.from(sourcesMap.keys()).some(sid =>
+        Object.keys(statsByTag).some(tagKey => statsByTag[tagKey].reached.has(ind + '|' + sid))
+      );
+      if (!hasColumn) industriesSet.delete(ind);
+    });
+
     if (industriesSet.size === 0 || sourcesMap.size === 0) {
       wrap.textContent = '対象データがありません。';
       return;
@@ -3872,6 +3902,26 @@ function setStraightenOn(on) {
       return `color-mix(in srgb, var(--accent) ${Math.round(t * 100)}%, var(--surface-alt))`;
     }
 
+    // 業種ごとに、このヒートマップに実際に出てくる会社の数（タグをまたいだ和集合）を
+    // 行ラベルに表示する。列と同じフィルタ（迂回路・手動非表示・Step2非表示・
+    // 対象PL項目に直接つながるか）を通した上で数えるので、表に出ているセルの裏付け数と
+    // 一致する。
+    const industryCompanies = new Map(); // industry -> Set(company)
+    DATA_BASE.edges.forEach(e => {
+      if (hormuzReachable && !hormuzReachable.has(e.source)) return;
+      if (!sourcesMap.has(e.source)) return;
+      const t = baseNodesById.get(e.target);
+      if (!t || !t.industry || !industriesSet.has(t.industry)) return;
+      const matchesAnyTag = Object.keys(TAG_DEFS).some(tagKey => TAG_DEFS[tagKey].signByLabel[t.label] != null);
+      if (!matchesAnyTag) return;
+      if (isRedundantEdge(e.source, e.target)) return;
+      if (isManuallyHiddenNode(t)) return;
+      if (isStep2ScoreExcluded(e.target)) return;
+      if (!e.company) return;
+      if (!industryCompanies.has(t.industry)) industryCompanies.set(t.industry, new Set());
+      industryCompanies.get(t.industry).add(e.company);
+    });
+
     const table = document.createElement('table');
     table.className = 'pl-heatmap-table';
     const thead = document.createElement('thead');
@@ -3893,7 +3943,8 @@ function setStraightenOn(on) {
       const rowTh = document.createElement('th');
       rowTh.className = 'pl-heatmap-row-head';
       const swatchColor = industryColor.get(ind) || 'var(--line-strong)';
-      rowTh.innerHTML = `<span class="pl-heatmap-swatch" style="background:${swatchColor}"></span>${escapeHtml(ind)}`;
+      const companyCount = (industryCompanies.get(ind) || new Set()).size;
+      rowTh.innerHTML = `<span class="pl-heatmap-swatch" style="background:${swatchColor}"></span>${escapeHtml(ind)}<span class="pl-heatmap-row-company-count">（${companyCount}社）</span>`;
       tr.appendChild(rowTh);
       sourceIds.forEach(sid => {
         const td = document.createElement('td');
