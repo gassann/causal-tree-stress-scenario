@@ -1471,7 +1471,7 @@ function setStraightenOn(on) {
   // よって異なるという考え方で、同じ結果ノードでも原因ごとに異なる重みを使える）。
   // PL勘定科目に繋がるエッジは結果が確定事象として扱われるため、どちらのモードでも
   // 重み付けの対象外（plSumは常に非加重）。
-  let probabilityMode = 'node';
+  let probabilityMode = 'edge';
   // A→Cの直接エッジに対して、この図の中にA→B→Cのような2ホップ以上の迂回路が
   // 別に存在するなら、その直接エッジを非表示にするかどうか。デフォルトはオン。
   // シナリオ計算（computeAllScoredPaths/computeExcludeBest）がページ初期化時点で
@@ -2120,13 +2120,13 @@ function setStraightenOn(on) {
     pmLabel.style.marginLeft = '14px';
     pmLabel.textContent = '蓋然性の算出元';
     const probNodeChip = document.createElement('span');
-    probNodeChip.className = 'chip active';
+    probNodeChip.className = 'chip';
     probNodeChip.textContent = 'ノードの蓋然性';
-    probNodeChip.title = '結果ノード自身に割り振られた蓋然性(1-4)を使って重み付けします（デフォルト）。同じ結果ノードであれば、原因が何であっても同じ重みになります。';
+    probNodeChip.title = '結果ノード自身に割り振られた蓋然性(1-4)を使って重み付けします。同じ結果ノードであれば、原因が何であっても同じ重みになります。';
     const probEdgeChip = document.createElement('span');
-    probEdgeChip.className = 'chip';
+    probEdgeChip.className = 'chip active';
     probEdgeChip.textContent = 'エッジの蓋然性';
-    probEdgeChip.title = '原因→結果の個々のエッジに割り振られた蓋然性(1-4)を使って重み付けします。「結果が起こる確率は原因によって異なる」という考え方で、同じ結果ノードでも原因ごとに異なる重みを使えます（試験版・エッジ蓋然性が未設定の場合は1.0として扱います。PL勘定科目に繋がるエッジは結果が確定事象として扱われるため対象外です）。';
+    probEdgeChip.title = '原因→結果の個々のエッジに割り振られた蓋然性(1-4)を使って重み付けします（デフォルト）。「結果が起こる確率は原因によって異なる」という考え方で、同じ結果ノードでも原因ごとに異なる重みを使えます（試験版・エッジ蓋然性が未設定の場合は1.0として扱います。PL勘定科目に繋がるエッジは結果が確定事象として扱われるため対象外です）。';
     function setProbabilityMode(mode) {
       probabilityMode = mode;
       probNodeChip.classList.toggle('active', mode === 'node');
@@ -2718,6 +2718,81 @@ function setStraightenOn(on) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
+  // ---- ノードホバー時のスコア計算内訳ツールチップ ----
+  // 「ノードのスコア計算方法」タグで選ばれている方式（PL合計×蓋然性／影響度×蓋然性／
+  // マトリクス色ゾーン）に応じて、そのノードのスコアがどう計算されたかを表示する。
+  // 影響度・蓋然性が未設定のノード（試験版・一部ノードのみ対象）は計算対象外として
+  // その旨だけを示す。
+  function describeNodePlBreakdown(id) {
+    const byTarget = new Map(); // targetId -> { industry, label, vals: [] }
+    (scoreBaseOutAdj.get(id) || []).forEach(e => {
+      const t = scoreBaseNodesById.get(e.target);
+      if (!t.industry || !e.change_pct || t.plPositive) return; // ポジティブなPLノードはストレスシナリオの対象外
+      if (isRedundantEdge(id, e.target)) return;
+      if (isManuallyHiddenNode(t)) return;
+      if (isStep2ScoreExcluded(e.target)) return;
+      const v = parseFloat(e.change_pct);
+      if (!isFinite(v)) return;
+      if (!byTarget.has(e.target)) byTarget.set(e.target, { industry: t.industry, label: t.label, vals: [] });
+      byTarget.get(e.target).vals.push(Math.abs(v));
+    });
+    const rows = [];
+    byTarget.forEach(({ industry, label, vals }) => rows.push({ industry, label, mean: trimmedMean(vals), n: vals.length }));
+    rows.sort((a, b) => b.mean - a.mean);
+    return rows;
+  }
+  function buildNodeScoreTooltipHtml(id) {
+    const n = scoreNodesById.get(id);
+    const header = `<div class="tt-company">${escapeHtml(n.label)}</div>`;
+    if (!scoredIds.has(id)) {
+      return header + '<div class="tt-cr">影響度・蓋然性が未設定のため、スコア計算（試験版・一部ノードのみ対象）の対象外です。</div>';
+    }
+    if (scoreMode !== 'exclude') {
+      const score = nodeScore(id);
+      const maxLabel = scoreMode === 'zone' ? '最大4点' : '最大16点';
+      const formula = scoreMode === 'zone'
+        ? `影響度${n.impact} + 蓋然性${n.probability} = ${n.impact + n.probability} → ゾーン${score}`
+        : `影響度${n.impact} × 蓋然性${n.probability} = ${score}`;
+      const reasons =
+        (n.impactReason ? `<div class="tt-quote">影響度の根拠: ${escapeHtml(n.impactReason)}</div>` : '') +
+        (n.probabilityReason ? `<div class="tt-quote">蓋然性の根拠: ${escapeHtml(n.probabilityReason)}</div>` : '');
+      return header + `<div class="tt-cr">スコア ${score}（${maxLabel}）</div><div class="tt-quote">${escapeHtml(formula)}</div>` + reasons;
+    }
+    ensureExcludeScoreCache();
+    const entry = excludeScoreCache.get(id);
+    if (!entry) {
+      return header + '<div class="tt-cr">スコア付きの根から辿れないため、「PL合計×蓋然性」の計算対象外です。</div>';
+    }
+    const breakdown = describeNodePlBreakdown(id);
+    const plLines = breakdown.length
+      ? breakdown.map(r => `${escapeHtml(r.industry)}/${escapeHtml(r.label)} ${r.mean.toFixed(1)}%`).join('<br>')
+      : '（直接PLに繋がる増減率データなし）';
+    let childLine = '（最良の子ノードなし）';
+    if (entry.choice.type === 'child') {
+      const childId = entry.choice.id;
+      const childNode = scoreNodesById.get(childId);
+      const childEntry = excludeScoreCache.get(childId);
+      const edge = n.out.find(e => e.target === childId);
+      const weight = probabilityMode === 'edge'
+        ? edgeProbabilityWeight(edge)
+        : (childNode.probability != null ? probabilityWeight(childNode.probability) : 1);
+      const probSrc = probabilityMode === 'edge' ? '原因→結果のエッジの蓋然性' : '結果ノード自身の蓋然性';
+      childLine = `「${escapeHtml(childNode.label)}」経由: ${childEntry.raw.toFixed(2)} × 重み${weight.toFixed(2)}（${probSrc}） = ${(childEntry.raw * weight).toFixed(2)}`;
+    } else if (entry.choice.type === 'pl') {
+      childLine = '（子ノード経由より直接PLの方が大きいため不採用）';
+    }
+    return header +
+      `<div class="tt-cr">スコア（このノード自身の生値）: ${entry.raw.toFixed(2)} = 直接PL合計 ${entry.plSum.toFixed(2)} + 子ノード経由 ${(entry.raw - entry.plSum).toFixed(2)}</div>` +
+      `<div class="tt-quote">直接PL合計の内訳: ${plLines}</div>` +
+      `<div class="tt-quote">子ノード経由: ${childLine}</div>` +
+      '<div class="tt-quote" style="opacity:.75">※このノードが他ノードの原因として使われる際は、さらにこのノード自身の蓋然性（または原因→結果のエッジの蓋然性）による重みが掛かります。</div>';
+  }
+  function showNodeScoreTooltip(evt, id) {
+    tooltip.innerHTML = buildNodeScoreTooltipHtml(id);
+    tooltip.classList.add('show');
+    positionTooltip(evt);
+  }
+
   // ---- ノードの右クリックメニュー（「このノードを起点にしたツリーを表示」） ----
   // 「ノード限定」タグをオンにしなくても、右クリックから直接
   // isolationFocusId/showIsolationFocus を呼び出せるようにする。renderGraphSvg は
@@ -2907,9 +2982,9 @@ function setStraightenOn(on) {
       // どのノードがどのノードに繋がっているか一目でわかるよう、ホバーで直接の
       // 上流・下流エッジ／ノードだけを強調し、それ以外をこの図（コンポーネント）内で
       // 薄くする。全体を再描画せずCSSクラスの付け外しだけで行う軽量な操作。
-      // （ツールチップ・PLヒートマップの絞り込みはクリック時のみ、表示が頻繁に切り替わって
-      // 見にくくなるため対象外のまま）
-      g.addEventListener('mouseenter', () => {
+      // あわせて、そのノードのスコアと計算方法（内訳）をツールチップで表示する
+      // （PLヒートマップの絞り込みは引き続きクリック時のみ）。
+      g.addEventListener('mouseenter', evt => {
         const neighborIds = new Set([id]);
         localIn.get(id).forEach(e => neighborIds.add(e.source));
         localOut.get(id).forEach(e => neighborIds.add(e.target));
@@ -2926,9 +3001,12 @@ function setStraightenOn(on) {
           eg.classList.toggle('is-hover-active', active);
           eg.classList.toggle('is-hover-dim', !active);
         });
+        showNodeScoreTooltip(evt, id);
       });
+      g.addEventListener('mousemove', positionTooltip);
       g.addEventListener('mouseleave', () => {
         svg.querySelectorAll('.is-hover-dim, .is-hover-active').forEach(elx => elx.classList.remove('is-hover-dim', 'is-hover-active'));
+        hideTooltip();
       });
       g.addEventListener('click', () => {
         if (manualHideMode) { hideNodeManually(id); return; }
