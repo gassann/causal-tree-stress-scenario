@@ -1695,12 +1695,18 @@ function setStraightenOn(on) {
     });
     const childVal = bestChildId ? bestChildVal : 0;
     const raw = plSum + childVal;
+    // choiceは「シナリオの経路表示でこのノードの先をどちらで辿るか（PL直接／子ノード）」を
+    // 選ぶためだけのもので、rawの値自体は常にplSum＋子ノード経由（childVal）の合計である
+    // （どちらか片方を採用・不採用にする、という意味ではない）。
     let choice;
     if (bestPlContribution > childVal + 1e-9 && bestPlTarget) choice = { type: 'pl', edge: bestPlEdge, target: bestPlTarget };
     else if (bestChildId) choice = { type: 'child', id: bestChildId };
     else if (bestPlTarget) choice = { type: 'pl', edge: bestPlEdge, target: bestPlTarget };
     else choice = { type: 'none' };
-    memo.set(id, { raw, plSum, choice });
+    // bestChildはchoiceがplの場合でも（経路表示には使われないが）rawの計算には常に
+    // 加算されているため、ツールチップでの内訳表示用に別途そのまま保持しておく。
+    const bestChild = bestChildId ? { id: bestChildId, raw: bestChildRaw, weightedVal: bestChildVal } : null;
+    memo.set(id, { raw, plSum, choice, bestChild });
     return raw;
   }
 
@@ -2767,24 +2773,28 @@ function setStraightenOn(on) {
     const plLines = breakdown.length
       ? breakdown.map(r => `${escapeHtml(r.industry)}/${escapeHtml(r.label)} ${r.mean.toFixed(1)}%`).join('<br>')
       : '（直接PLに繋がる増減率データなし）';
-    let childLine = '（最良の子ノードなし）';
-    if (entry.choice.type === 'child') {
-      const childId = entry.choice.id;
+    // 子ノード経由の値は、経路表示上の採用・不採用（entry.choice）に関わらず、
+    // 常に「最も重み付けスコアが大きい直接の子ノード1つ」の値がplSumに加算されている
+    // （entry.choiceはシナリオ経路表示でこの先をPL直接／子ノードのどちらで辿るかの
+    // 選択であり、スコアの加算対象を選ぶものではない）。
+    let childLine = '（対象となる子ノードなし）';
+    if (entry.bestChild) {
+      const childId = entry.bestChild.id;
       const childNode = scoreNodesById.get(childId);
-      const childEntry = excludeScoreCache.get(childId);
       const edge = n.out.find(e => e.target === childId);
       const weight = probabilityMode === 'edge'
         ? edgeProbabilityWeight(edge)
         : (childNode.probability != null ? probabilityWeight(childNode.probability) : 1);
       const probSrc = probabilityMode === 'edge' ? '原因→結果のエッジの蓋然性' : '結果ノード自身の蓋然性';
-      childLine = `「${escapeHtml(childNode.label)}」経由: ${childEntry.raw.toFixed(2)} × 重み${weight.toFixed(2)}（${probSrc}） = ${(childEntry.raw * weight).toFixed(2)}`;
-    } else if (entry.choice.type === 'pl') {
-      childLine = '（子ノード経由より直接PLの方が大きいため不採用）';
+      childLine = `「${escapeHtml(childNode.label)}」経由: ${entry.bestChild.raw.toFixed(2)} × 重み${weight.toFixed(2)}（${probSrc}） = ${entry.bestChild.weightedVal.toFixed(2)}`;
     }
+    const pathNote = entry.choice.type === 'pl'
+      ? '（シナリオ経路の先は、この子ノード経由より直接PLの方が大きいためPL直接側を表示します）'
+      : (entry.choice.type === 'child' ? '（シナリオ経路の先はこの子ノード経由を表示します）' : '');
     return header +
       `<div class="tt-cr">スコア（このノード自身の生値）: ${entry.raw.toFixed(2)} = 直接PL合計 ${entry.plSum.toFixed(2)} + 子ノード経由 ${(entry.raw - entry.plSum).toFixed(2)}</div>` +
       `<div class="tt-quote">直接PL合計の内訳: ${plLines}</div>` +
-      `<div class="tt-quote">子ノード経由: ${childLine}</div>` +
+      `<div class="tt-quote">子ノード経由: ${childLine}${pathNote ? ' ' + pathNote : ''}</div>` +
       '<div class="tt-quote" style="opacity:.75">※このノードが他ノードの原因として使われる際は、さらにこのノード自身の蓋然性（または原因→結果のエッジの蓋然性）による重みが掛かります。</div>';
   }
   function showNodeScoreTooltip(evt, id) {
