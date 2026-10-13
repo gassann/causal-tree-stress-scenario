@@ -722,6 +722,9 @@ const MERGE_SCOPE_ROOT_LABEL = 'ホルムズ海峡封鎖';
 // ノード（企業影響無しノード非表示をオンにすると隠れるノード）は「兄弟ノード」の
 // カウントから除外する。フィルタ後の見た目を基準に統合可否を判断するため。
 const REPORT_OR_AI_NAMES = new Set(['AI推測', 'みずほマンスリーレポート', '三菱UFJリサーチ&コンサルティング', '大和総研', 'A社']);
+// 実データの増減率%からスコア・影響度を機械的に算出する際（computeExcludeBest／
+// describeNodePlBreakdown）は、PL項目全体ではなく売上（部門売上を含む）のみを対象にする。
+const SALES_PL_LABELS = new Set(['売上高増加', '部門売上増加', '売上高減少', '部門売上減少']);
 function isRealCompany(name) {
   return !!name && !REPORT_OR_AI_NAMES.has(name.trim());
 }
@@ -1662,6 +1665,7 @@ function setStraightenOn(on) {
       (scoreBaseOutAdj.get(id) || []).forEach(e => {
         const t = scoreBaseNodesById.get(e.target);
         if (!t.industry || !e.change_pct || t.plPositive) return; // ポジティブなPLノードはストレスシナリオの対象外
+        if (!SALES_PL_LABELS.has(t.label)) return; // 売上（部門売上含む）以外のPL項目は対象外
         if (isRedundantEdge(id, e.target)) return; // 迂回路により非表示になっている直接エッジは無いものとして扱う
         if (isManuallyHiddenNode(t)) return; // 手動で非表示にしたノードは除外後のツリーとして扱う
         if (isStep2ScoreExcluded(e.target)) return; // Step2ノードを非表示にしている場合は除外後のツリーとして扱う
@@ -2826,6 +2830,7 @@ function setStraightenOn(on) {
     (scoreBaseOutAdj.get(id) || []).forEach(e => {
       const t = scoreBaseNodesById.get(e.target);
       if (!t.industry || !e.change_pct || t.plPositive) return; // ポジティブなPLノードはストレスシナリオの対象外
+      if (!SALES_PL_LABELS.has(t.label)) return; // 売上（部門売上含む）以外のPL項目は対象外
       if (isRedundantEdge(id, e.target)) return;
       if (isManuallyHiddenNode(t)) return;
       if (isStep2ScoreExcluded(e.target)) return;
