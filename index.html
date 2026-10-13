@@ -2878,13 +2878,12 @@ function setStraightenOn(on) {
     let childLine = '（対象となる子ノードなし）';
     const nonZeroCandidates = (entry.childCandidates || []).filter(c => c.weightedVal > 1e-9);
     if (nonZeroCandidates.length) {
-      const probSrc = probabilityMode === 'edge' ? '原因→結果のエッジの蓋然性' : '結果ノード自身の蓋然性';
       const itemLines = nonZeroCandidates.map((c, i) => {
         const childNode = scoreNodesById.get(c.id);
         const mark = i === 0 ? '◎採用' : '　比較';
         return `${mark}「${escapeHtml(childNode.label)}」: ${c.raw.toFixed(2)} × 重み${c.weight.toFixed(2)} = ${c.weightedVal.toFixed(2)}`;
       });
-      childLine = `（${probSrc}で重み付けし、最大値を採用。0のものは非表示）<br>` + itemLines.join('<br>');
+      childLine = itemLines.join('<br>');
     }
     const pathNote = entry.choice.type === 'pl'
       ? '（シナリオ経路の先は、この子ノード経由より直接PLの方が大きいためPL直接側を表示します）'
