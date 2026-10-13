@@ -1679,6 +1679,9 @@ function setStraightenOn(on) {
       }
     });
     let bestChildId = null, bestChildVal = -Infinity, bestChildRaw = -Infinity;
+    const childCandidateByTarget = new Map(); // ツールチップで「不採用」側も含めて比較できるよう、直接の子ノードごとに保持する
+    // （同じ子ノードへ複数本のエッジ（会社違い等）がある場合は、その中で最も重みが大きいものを
+    // 代表として残す。bestChildの選定自体も元々エッジ単位で見ているため、結果は変わらない。）
     node.out.forEach(e => {
       if (!scoredIds.has(e.target) || scoreNodesById.get(e.target).industry) return; // PL先は合計側で扱う
       if (isRedundantEdge(id, e.target)) return; // 迂回路により非表示になっている直接エッジは無いものとして扱う
@@ -1689,10 +1692,15 @@ function setStraightenOn(on) {
         ? edgeProbabilityWeight(e)
         : (scoreNodesById.get(e.target).probability != null ? probabilityWeight(scoreNodesById.get(e.target).probability) : 1);
       const v = weight * childRaw;
+      const existing = childCandidateByTarget.get(e.target);
+      if (!existing || v > existing.weightedVal) {
+        childCandidateByTarget.set(e.target, { id: e.target, raw: childRaw, weight, weightedVal: v });
+      }
       const better = v > bestChildVal + 1e-9 ||
         (Math.abs(v - bestChildVal) <= 1e-9 && childRaw > bestChildRaw + 1e-9);
       if (better) { bestChildVal = v; bestChildId = e.target; bestChildRaw = childRaw; }
     });
+    const childCandidates = Array.from(childCandidateByTarget.values());
     const childVal = bestChildId ? bestChildVal : 0;
     const raw = plSum + childVal;
     // choiceは「シナリオの経路表示でこのノードの先をどちらで辿るか（PL直接／子ノード）」を
@@ -1706,7 +1714,8 @@ function setStraightenOn(on) {
     // bestChildはchoiceがplの場合でも（経路表示には使われないが）rawの計算には常に
     // 加算されているため、ツールチップでの内訳表示用に別途そのまま保持しておく。
     const bestChild = bestChildId ? { id: bestChildId, raw: bestChildRaw, weightedVal: bestChildVal } : null;
-    memo.set(id, { raw, plSum, choice, bestChild });
+    childCandidates.sort((a, b) => b.weightedVal - a.weightedVal);
+    memo.set(id, { raw, plSum, choice, bestChild, childCandidates });
     return raw;
   }
 
@@ -2776,25 +2785,29 @@ function setStraightenOn(on) {
     // 子ノード経由の値は、経路表示上の採用・不採用（entry.choice）に関わらず、
     // 常に「最も重み付けスコアが大きい直接の子ノード1つ」の値がplSumに加算されている
     // （entry.choiceはシナリオ経路表示でこの先をPL直接／子ノードのどちらで辿るかの
-    // 選択であり、スコアの加算対象を選ぶものではない）。
+    // 選択であり、スコアの加算対象を選ぶものではない）。採用されなかった子ノードも
+    // 比較対象として並べて表示し、最大値であることが分かるようにする。
     let childLine = '（対象となる子ノードなし）';
-    if (entry.bestChild) {
-      const childId = entry.bestChild.id;
-      const childNode = scoreNodesById.get(childId);
-      const edge = n.out.find(e => e.target === childId);
-      const weight = probabilityMode === 'edge'
-        ? edgeProbabilityWeight(edge)
-        : (childNode.probability != null ? probabilityWeight(childNode.probability) : 1);
+    if (entry.childCandidates && entry.childCandidates.length) {
       const probSrc = probabilityMode === 'edge' ? '原因→結果のエッジの蓋然性' : '結果ノード自身の蓋然性';
-      childLine = `「${escapeHtml(childNode.label)}」経由: ${entry.bestChild.raw.toFixed(2)} × 重み${weight.toFixed(2)}（${probSrc}） = ${entry.bestChild.weightedVal.toFixed(2)}`;
+      const itemLines = entry.childCandidates.map((c, i) => {
+        const childNode = scoreNodesById.get(c.id);
+        const mark = i === 0 ? '◎採用' : '　比較';
+        return `${mark}「${escapeHtml(childNode.label)}」: ${c.raw.toFixed(2)} × 重み${c.weight.toFixed(2)} = ${c.weightedVal.toFixed(2)}`;
+      });
+      childLine = `（${probSrc}で重み付けし、最大値を採用）<br>` + itemLines.join('<br>');
     }
     const pathNote = entry.choice.type === 'pl'
       ? '（シナリオ経路の先は、この子ノード経由より直接PLの方が大きいためPL直接側を表示します）'
       : (entry.choice.type === 'child' ? '（シナリオ経路の先はこの子ノード経由を表示します）' : '');
+    const childValText = (entry.raw - entry.plSum).toFixed(2);
+    const scoreFormula = entry.plSum > 1e-9
+      ? `${entry.raw.toFixed(2)} = 直接PL合計 ${entry.plSum.toFixed(2)} + 子ノード経由 ${childValText}`
+      : `${entry.raw.toFixed(2)} = 子ノード経由 ${childValText}`;
     return header +
-      `<div class="tt-cr">スコア（このノード自身の生値）: ${entry.raw.toFixed(2)} = 直接PL合計 ${entry.plSum.toFixed(2)} + 子ノード経由 ${(entry.raw - entry.plSum).toFixed(2)}</div>` +
+      `<div class="tt-cr">スコア（このノード自身の生値）: ${scoreFormula}</div>` +
       `<div class="tt-quote">直接PL合計の内訳: ${plLines}</div>` +
-      `<div class="tt-quote">子ノード経由: ${childLine}${pathNote ? ' ' + pathNote : ''}</div>` +
+      `<div class="tt-quote">子ノード経由: ${childLine}${pathNote ? '<br>' + pathNote : ''}</div>` +
       '<div class="tt-quote" style="opacity:.75">※このノードが他ノードの原因として使われる際は、さらにこのノード自身の蓋然性（または原因→結果のエッジの蓋然性）による重みが掛かります。</div>';
   }
   function showNodeScoreTooltip(evt, id) {
