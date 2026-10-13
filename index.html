@@ -669,7 +669,7 @@
 
   <section id="causeHeatmapSection">
     <h2>業種 × 最終手前ノード 影響ヒートマップ</h2>
-    <p class="desc">「売上」「営業利益」「その他」タグで対象のPL項目（売上高増加/減少・部門売上増加/減少、営業利益増加/減少・部門営業利益増加/減少、または売上原価・売上総利益・経常利益・当期純利益・部門／地域利益など売上・営業利益以外の一般的なPL項目）を切り替え、そのPL項目に直接つながるエッジの「原因ノード（PL項目の手前のノード）」を列、業種を行として、変動率(%)のトリム平均を表示します。セル内の数値はプラス（増加）/マイナス（減少）の符号付きで表示しますが、色は単色の濃淡のみで、変動率の大きさではなく該当する会社数（裏付けの厚さ）を表します。業種の行見出しには、そのヒートマップに実際に出てくる会社数も表示します。対象は「ホルムズ海峡封鎖」から辿れる原因ノードのみ。全業種・全タグを通してプラス方向にしかならない原因ノード（例:「賃料水準の上昇」が不動産業の増益にしか繋がらない場合）は列から除外します。行・列は3つのタグすべてに出てくる組み合わせの和集合で固定され、タグを切り替えても同じ並びのまま（該当しない組み合わせはグレー）。「業種×PL項目」ヒートマップと同じく、迂回路がある直接エッジ・手動非表示ノード・Step2ノード非表示の設定を反映します。</p>
+    <p class="desc">「売上」「営業利益」「その他」タグで対象のPL項目（売上高増加/減少・部門売上増加/減少、営業利益増加/減少・部門営業利益増加/減少、または売上原価・売上総利益・経常利益・当期純利益・部門／地域利益など売上・営業利益以外の一般的なPL項目）を切り替え、そのPL項目に直接つながるエッジの「原因ノード（PL項目の手前のノード）」を列、業種を行として、変動率(%)のトリム平均を表示します。セル内の数値はプラス（増加）/マイナス（減少）の符号付きで表示しますが、色は単色の濃淡のみで、変動率の大きさではなく該当する会社数（裏付けの厚さ）を表します。業種の行見出しには「このヒートマップに実際に出てくる会社数／有報からその業種として抽出された全会社数」を表示します。対象は「ホルムズ海峡封鎖」から辿れる原因ノードのみ。全業種・全タグを通してプラス方向にしかならない原因ノード（例:「賃料水準の上昇」が不動産業の増益にしか繋がらない場合）は列から除外します。行・列は3つのタグすべてに出てくる組み合わせの和集合で固定され、タグを切り替えても同じ並びのまま（該当しない組み合わせはグレー）。「業種×PL項目」ヒートマップと同じく、迂回路がある直接エッジ・手動非表示ノード・Step2ノード非表示の設定を反映します。</p>
     <div class="filter-row" id="causeHeatmapTagRow"></div>
     <div class="pl-heatmap-wrap" id="causeHeatmapWrap"></div>
   </section>
@@ -4006,7 +4006,9 @@ function setStraightenOn(on) {
     // 業種ごとに、このヒートマップに実際に出てくる会社の数（タグをまたいだ和集合）を
     // 行ラベルに表示する。列と同じフィルタ（迂回路・手動非表示・Step2非表示・
     // 対象PL項目に直接つながるか）を通した上で数えるので、表に出ているセルの裏付け数と
-    // 一致する。
+    // 一致する。分母には、ホルムズ海峡封鎖ツリーや列の絞り込みとは無関係に、そもそも
+    // 有報からその業種として抽出された会社の総数（AI推測・マクロレポートは除く）を表示し、
+    // このヒートマップがその業種の抽出済み会社のうちどれだけを反映しているかが分かるようにする。
     const industryCompanies = new Map(); // industry -> Set(company)
     DATA_BASE.edges.forEach(e => {
       if (hormuzReachable && !hormuzReachable.has(e.source)) return;
@@ -4021,6 +4023,13 @@ function setStraightenOn(on) {
       if (!e.company) return;
       if (!industryCompanies.has(t.industry)) industryCompanies.set(t.industry, new Set());
       industryCompanies.get(t.industry).add(e.company);
+    });
+    const industryTotalCompanies = new Map(); // industry -> Set(company)（有報から抽出された全社、ツリー絞り込み前）
+    DATA_BASE.edges.forEach(e => {
+      if (!e.industry || !industriesSet.has(e.industry)) return;
+      if (!isRealCompany(e.company)) return;
+      if (!industryTotalCompanies.has(e.industry)) industryTotalCompanies.set(e.industry, new Set());
+      industryTotalCompanies.get(e.industry).add(e.company);
     });
 
     const table = document.createElement('table');
@@ -4045,7 +4054,8 @@ function setStraightenOn(on) {
       rowTh.className = 'pl-heatmap-row-head';
       const swatchColor = industryColor.get(ind) || 'var(--line-strong)';
       const companyCount = (industryCompanies.get(ind) || new Set()).size;
-      rowTh.innerHTML = `<span class="pl-heatmap-swatch" style="background:${swatchColor}"></span>${escapeHtml(ind)}<span class="pl-heatmap-row-company-count">（${companyCount}社）</span>`;
+      const totalCompanyCount = (industryTotalCompanies.get(ind) || new Set()).size;
+      rowTh.innerHTML = `<span class="pl-heatmap-swatch" style="background:${swatchColor}"></span>${escapeHtml(ind)}<span class="pl-heatmap-row-company-count" title="有報からその業種として抽出された全${totalCompanyCount}社のうち、このヒートマップに反映されているのは${companyCount}社">（${companyCount}／${totalCompanyCount}社）</span>`;
       tr.appendChild(rowTh);
       sourceIds.forEach(sid => {
         const td = document.createElement('td');
