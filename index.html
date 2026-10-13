@@ -2154,6 +2154,7 @@ function setStraightenOn(on) {
       probEdgeChip.classList.toggle('active', mode === 'edge');
       invalidateExcludeScoreCache();
       if (scenariosShown) applyScenarioDisplay();
+      refreshNodeScoreLabels();
     }
     probNodeChip.addEventListener('click', () => setProbabilityMode('node'));
     probEdgeChip.addEventListener('click', () => setProbabilityMode('edge'));
@@ -2175,6 +2176,7 @@ function setStraightenOn(on) {
       updateProbModeVisibility(mode);
       if (mode !== 'exclude') allScoredPaths = computeAllScoredPaths();
       if (scenariosShown) applyScenarioDisplay();
+      refreshNodeScoreLabels();
     }
     productChip.addEventListener('click', () => setScoreMode('product'));
     zoneChip.addEventListener('click', () => setScoreMode('zone'));
@@ -2270,21 +2272,43 @@ function setStraightenOn(on) {
     return { lines, w, h, hasExtra: !!extraLine };
   }
 
-  // ノードの下に常時表示する「スコアX.XX / 影響度N」の文字列。
-  // スコア＝このノード自身の生値（excludeScoreCacheのraw、ホバー時のツールチップと同じ計算）。
-  // これはPL合計×蓋然性の重み付けで下流から機械的に積み上げた連続値で、スコア付きの根
-  // （impactが設定されたノード）から辿れるノードにのみ存在する。
-  // 影響度＝ホルムズ海峡封鎖_ノード影響度蓋然性.csvで人が根拠を調べて割り当てた1-4の
-  // 評価値（node.impact）。スコアとは独立した別の数値で、スコアが無くても影響度だけ
-  // 設定されているノード、逆にスコアだけ計算されるノードもあるため、別々に判定する。
+  // ノードの下に常時表示するラベル文字列。「ノードのスコア計算方法」タグで選ばれている
+  // 方式によって中身が変わる（ホバー時のbuildNodeScoreTooltipHtmlと同じ分岐）。
+  // ・「PL合計×蓋然性」(exclude)：影響度(1-4)は計算に使われないため表示せず、
+  //   excludeScoreCacheのraw（下流から機械的に積み上げた連続値）だけを「スコア」として示す。
+  // ・それ以外（影響度×蓋然性／マトリクス色ゾーン）：スコアの計算式そのものが
+  //   影響度(1-4)×蓋然性(1-4)なので、両方の生値と計算結果を示す。
   function nodeScoreImpactLabel(id) {
     const node = nodesById.get(id);
-    const cache = ensureExcludeScoreCache();
-    const entry = cache.get(id);
-    const parts = [];
-    if (entry) parts.push(`スコア${entry.raw.toFixed(2)}`);
-    if (node.impact != null) parts.push(`影響度${node.impact}`);
-    return parts.length ? parts.join(' / ') : null;
+    if (scoreMode !== 'exclude') {
+      if (node.impact == null) return null;
+      const score = nodeScore(id);
+      return scoreMode === 'zone'
+        ? `影響度${node.impact} + 蓋然性${node.probability} → ゾーン${score}`
+        : `影響度${node.impact} × 蓋然性${node.probability} = ${score}`;
+    }
+    const entry = ensureExcludeScoreCache().get(id);
+    return entry ? `スコア${entry.raw.toFixed(2)}` : null;
+  }
+
+  // レイアウト時のノード枠の高さは計算方式を切り替えても変わらないよう、どちらの方式でも
+  // 表示され得るノードなら常に1行分を確保しておく（実際の文字列はrefreshNodeScoreLabelsで
+  // 計算方式に応じて書き換える）。
+  function nodeScoreLineReserved(id) {
+    const node = nodesById.get(id);
+    return node.impact != null || ensureExcludeScoreCache().has(id);
+  }
+
+  // 「ノードのスコア計算方法」「蓋然性の算出元」を切り替えた時に、既に描画済みのノード
+  // ラベル（下の小さい行）だけを書き換える。枠のサイズは変えないのでレイアウトの再計算は
+  // 不要（nodeScoreLineReservedで両方式分の行を確保済みのため）。
+  function refreshNodeScoreLabels() {
+    nodeDom.forEach(({ g }, id) => {
+      const tspan = g.querySelector('.node-extra-line');
+      if (!tspan) return;
+      tspan.textContent = nodeScoreImpactLabel(id) || ' ';
+    });
+    refreshIsolationIfOpen();
   }
 
   // 最長経路法でnodeIdsの各ノードに層番号(0始まり)を割り当てる。edgeListに現れない
@@ -2666,7 +2690,8 @@ function setStraightenOn(on) {
       let rh = 0;
       ids.forEach(id => {
         const node = nodesById.get(id);
-        const box = computeNodeBox(node.label, nodeScoreImpactLabel(id));
+        const extraLine = nodeScoreLineReserved(id) ? (nodeScoreImpactLabel(id) || ' ') : null;
+        const box = computeNodeBox(node.label, extraLine);
         nodeBox.set(id, { x, w: box.w, h: box.h, lines: box.lines, hasExtra: box.hasExtra, layer: l });
         x += box.w + GAP_X;
         rh = Math.max(rh, box.h);
