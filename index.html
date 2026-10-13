@@ -1762,7 +1762,28 @@ function setStraightenOn(on) {
     }
     return excludeScoreCache;
   }
-  function invalidateExcludeScoreCache() { excludeScoreCache = null; }
+  function invalidateExcludeScoreCache() { excludeScoreCache = null; totalImpactCache = null; }
+
+  // 表示用の「影響度」＝最終ノード（PLに直接繋がるノード）はそのノード自身の直接PL合計
+  // （excludeScoreCacheのplSum）、それ以外のノードは子ノードたち（entry.childCandidates。
+  // computeExcludeBestが既に迂回路・手動非表示・Step2非表示を反映した上で集めた、重複の
+  // ない直接の子ノード一覧）の影響度を合算したもの（下から上へ足し算で伝播）。
+  // 「スコア」（蓋然性で重み付けした最良の子1つだけを採用するexclude方式のraw）とは別の、
+  // 単純な合算ベースの指標。
+  let totalImpactCache = null;
+  function computeTotalImpact(id, visiting) {
+    if (!totalImpactCache) totalImpactCache = new Map();
+    if (totalImpactCache.has(id)) return totalImpactCache.get(id);
+    if (visiting.has(id)) return 0; // 循環防止
+    const entry = ensureExcludeScoreCache().get(id);
+    if (!entry) { totalImpactCache.set(id, 0); return 0; }
+    visiting.add(id);
+    let total = entry.plSum;
+    entry.childCandidates.forEach(c => { total += computeTotalImpact(c.id, visiting); });
+    visiting.delete(id);
+    totalImpactCache.set(id, total);
+    return total;
+  }
 
   const SCENARIO_PALETTE = ['#B0206E', '#2E6BA8', '#3A8F4A', '#C0762B', '#6A4FA0', '#1E8F9E', '#A8562E', '#8A8C1E'];
   let scenariosShown = false;
@@ -2276,9 +2297,9 @@ function setStraightenOn(on) {
   // 方式によって「影響度」に該当するものが変わる（ホバー時のbuildNodeScoreTooltipHtmlと
   // 同じ分岐・同じ値を使う）。
   // ・「PL合計×蓋然性」(exclude)：ここでの「影響度」は人が付けた1-4の評価値ではなく、
-  //   このノード自身の直接PL合計（excludeScoreCacheのplSum、実データの増減率%から
-  //   機械的に算出した値）が影響度に相当する。スコア（raw = plSum + 子ノード経由）は
-  //   それに蓋然性で重み付けした子ノード経由の値を加えたもの。
+  //   最終ノード（PLに直接繋がるノード）はそのノード自身の直接PL合計（plSum）、それ以外の
+  //   ノードは子ノードたちの影響度を合算したもの（computeTotalImpact、下から上へ足し算で
+  //   伝播）。スコア（raw）は蓋然性で重み付けした最良の子1つだけを採用する別の指標。
   // ・それ以外（影響度×蓋然性／マトリクス色ゾーン）：影響度は人が付けた1-4の評価値
   //   そのもので、スコアの計算式自体が影響度(1-4)×蓋然性(1-4)なので両方の生値を示す。
   function nodeScoreImpactLabel(id) {
@@ -2291,7 +2312,9 @@ function setStraightenOn(on) {
         : `影響度${node.impact} × 蓋然性${node.probability} = ${score}`;
     }
     const entry = ensureExcludeScoreCache().get(id);
-    return entry ? `影響度${entry.plSum.toFixed(2)} / スコア${entry.raw.toFixed(2)}` : null;
+    if (!entry) return null;
+    const impact = computeTotalImpact(id, new Set());
+    return `影響度${impact.toFixed(2)} / スコア${entry.raw.toFixed(2)}`;
   }
 
   // レイアウト時のノード枠の高さは計算方式を切り替えても変わらないよう、どちらの方式でも
