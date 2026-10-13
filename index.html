@@ -2273,11 +2273,14 @@ function setStraightenOn(on) {
   }
 
   // ノードの下に常時表示するラベル文字列。「ノードのスコア計算方法」タグで選ばれている
-  // 方式によって中身が変わる（ホバー時のbuildNodeScoreTooltipHtmlと同じ分岐）。
-  // ・「PL合計×蓋然性」(exclude)：影響度(1-4)は計算に使われないため表示せず、
-  //   excludeScoreCacheのraw（下流から機械的に積み上げた連続値）だけを「スコア」として示す。
-  // ・それ以外（影響度×蓋然性／マトリクス色ゾーン）：スコアの計算式そのものが
-  //   影響度(1-4)×蓋然性(1-4)なので、両方の生値と計算結果を示す。
+  // 方式によって「影響度」に該当するものが変わる（ホバー時のbuildNodeScoreTooltipHtmlと
+  // 同じ分岐・同じ値を使う）。
+  // ・「PL合計×蓋然性」(exclude)：ここでの「影響度」は人が付けた1-4の評価値ではなく、
+  //   このノード自身の直接PL合計（excludeScoreCacheのplSum、実データの増減率%から
+  //   機械的に算出した値）が影響度に相当する。スコア（raw = plSum + 子ノード経由）は
+  //   それに蓋然性で重み付けした子ノード経由の値を加えたもの。
+  // ・それ以外（影響度×蓋然性／マトリクス色ゾーン）：影響度は人が付けた1-4の評価値
+  //   そのもので、スコアの計算式自体が影響度(1-4)×蓋然性(1-4)なので両方の生値を示す。
   function nodeScoreImpactLabel(id) {
     const node = nodesById.get(id);
     if (scoreMode !== 'exclude') {
@@ -2288,7 +2291,7 @@ function setStraightenOn(on) {
         : `影響度${node.impact} × 蓋然性${node.probability} = ${score}`;
     }
     const entry = ensureExcludeScoreCache().get(id);
-    return entry ? `スコア${entry.raw.toFixed(2)}` : null;
+    return entry ? `影響度${entry.plSum.toFixed(2)} / スコア${entry.raw.toFixed(2)}` : null;
   }
 
   // レイアウト時のノード枠の高さは計算方式を切り替えても変わらないよう、どちらの方式でも
