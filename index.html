@@ -278,6 +278,12 @@
     fill: var(--ink);
     pointer-events: none;
   }
+  .node .node-extra-line {
+    font-size: 9.5px;
+    font-weight: 400;
+    fill: var(--ink-muted);
+    font-family: "JetBrains Mono", monospace;
+  }
   .node { cursor: pointer; }
   .node:hover rect { stroke: var(--accent); }
   .node.is-root rect { fill: var(--accent-soft); stroke: var(--accent); }
@@ -2244,15 +2250,41 @@ function setStraightenOn(on) {
     if (cur) lines.push(cur);
     return lines;
   }
-  function computeNodeBox(label) {
+  function computeNodeBox(label, extraLine) {
     const full = measure(label);
+    let lines, w;
     if (full <= MAX_NODE_W) {
-      return { lines: [label], w: Math.max(MIN_NODE_W, full + 26), h: LINE_H + NODE_PAD_Y * 2 };
+      lines = [label];
+      w = Math.max(MIN_NODE_W, full + 26);
+    } else {
+      lines = wrapLabel(label, MAX_NODE_W);
+      w = Math.max(Math.min(MAX_NODE_W, Math.max(...lines.map(measure))) + 26, MIN_NODE_W);
     }
-    const lines = wrapLabel(label, MAX_NODE_W);
-    const w = Math.min(MAX_NODE_W, Math.max(...lines.map(measure))) + 26;
+    // スコア（PL合計×蓋然性で機械的に算出した生値）と影響度（人が割り当てた1-4の評価値）を、
+    // ラベルの下にもう1行、小さい文字で常時表示する（どちらかしか無いノードもある）。
+    if (extraLine) {
+      lines = lines.concat([extraLine]);
+      w = Math.max(w, Math.min(MAX_NODE_W, measure(extraLine) + 26));
+    }
     const h = lines.length * LINE_H + NODE_PAD_Y * 2;
-    return { lines, w: Math.max(w, MIN_NODE_W), h };
+    return { lines, w, h, hasExtra: !!extraLine };
+  }
+
+  // ノードの下に常時表示する「スコアX.XX / 影響度N」の文字列。
+  // スコア＝このノード自身の生値（excludeScoreCacheのraw、ホバー時のツールチップと同じ計算）。
+  // これはPL合計×蓋然性の重み付けで下流から機械的に積み上げた連続値で、スコア付きの根
+  // （impactが設定されたノード）から辿れるノードにのみ存在する。
+  // 影響度＝ホルムズ海峡封鎖_ノード影響度蓋然性.csvで人が根拠を調べて割り当てた1-4の
+  // 評価値（node.impact）。スコアとは独立した別の数値で、スコアが無くても影響度だけ
+  // 設定されているノード、逆にスコアだけ計算されるノードもあるため、別々に判定する。
+  function nodeScoreImpactLabel(id) {
+    const node = nodesById.get(id);
+    const cache = ensureExcludeScoreCache();
+    const entry = cache.get(id);
+    const parts = [];
+    if (entry) parts.push(`スコア${entry.raw.toFixed(2)}`);
+    if (node.impact != null) parts.push(`影響度${node.impact}`);
+    return parts.length ? parts.join(' / ') : null;
   }
 
   // 最長経路法でnodeIdsの各ノードに層番号(0始まり)を割り当てる。edgeListに現れない
@@ -2634,8 +2666,8 @@ function setStraightenOn(on) {
       let rh = 0;
       ids.forEach(id => {
         const node = nodesById.get(id);
-        const box = computeNodeBox(node.label);
-        nodeBox.set(id, { x, w: box.w, h: box.h, lines: box.lines, layer: l });
+        const box = computeNodeBox(node.label, nodeScoreImpactLabel(id));
+        nodeBox.set(id, { x, w: box.w, h: box.h, lines: box.lines, hasExtra: box.hasExtra, layer: l });
         x += box.w + GAP_X;
         rh = Math.max(rh, box.h);
       });
@@ -2996,7 +3028,11 @@ function setStraightenOn(on) {
       const text = el('text', { x: box.w / 2, 'text-anchor': 'middle' }, g);
       const startY = (box.h - (box.lines.length - 1) * LINE_H) / 2 + 4;
       box.lines.forEach((line, i) => {
-        const tspan = el('tspan', { x: box.w / 2, y: startY + i * LINE_H }, text);
+        const isExtraLine = box.hasExtra && i === box.lines.length - 1;
+        const tspan = el('tspan', {
+          x: box.w / 2, y: startY + i * LINE_H,
+          class: isExtraLine ? 'node-extra-line' : '',
+        }, text);
         tspan.textContent = line;
       });
       if (hasChildren) {
