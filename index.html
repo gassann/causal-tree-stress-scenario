@@ -1513,6 +1513,12 @@ function setStraightenOn(on) {
   }
   function isRedundantEdge(source, target) {
     if (!hideRedundantEdges) return false;
+    // PLノードへの直接エッジは、実企業の増減率(%)という実データそのものなので、
+    // 他に迂回路（間接的な因果の多段経路）があっても「無いもの」にはしない。
+    // 迂回路による非表示・除外は、PL直結ではない中間ノード同士の直接エッジ
+    // （同じ因果が多段経路でも二重にカウントされてしまうのを防ぐためのもの）だけに適用する。
+    const t = scoreBaseNodesById.get(target);
+    if (t && t.industry) return false;
     let detour = false;
     (scoreBaseOutAdj.get(source) || []).forEach(e => {
       if (detour || e.target === target) return;
@@ -3071,7 +3077,10 @@ function setStraightenOn(on) {
       const strokeW = edgeStrokeWidth(groupEdges.length);
       const allInferred = groupEdges.every(e => e.inferred);
       const anyStep2 = groupEdges.some(e => e.step2);
-      const isRedundant = hasDetourPath(e0.source, e0.target, localOut, descendantsForRedundancy);
+      // PLノードへの直接エッジは実データそのものなので、迂回路があっても非表示にしない
+      // （スコア計算側のisRedundantEdgeと同じ考え方）。
+      const targetNode = nodesById.get(e0.target);
+      const isRedundant = !targetNode.industry && hasDetourPath(e0.source, e0.target, localOut, descendantsForRedundancy);
       const g = el('g', {
         class: 'edge-group' + (allInferred ? ' is-inferred' : '') + (anyStep2 ? ' is-step2-edge' : '') + (isRedundant && hideRedundantEdges ? ' is-hidden' : ''),
         'data-edge': e0.idx, 'data-edge-count': groupEdges.length, 'data-source': e0.source, 'data-target': e0.target,
