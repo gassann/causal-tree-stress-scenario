@@ -405,12 +405,16 @@
   .se-node-box.se-computing { fill: var(--warn-soft); stroke: var(--warn); stroke-width: 2.2; }
   .se-node-box.se-final { stroke-width: 2.4; }
   .se-node-box.se-leaf { fill: var(--accent-soft); stroke: var(--accent); }
+  .se-node-box.se-sibling { fill: var(--surface-alt); stroke: var(--line); stroke-dasharray: 3,2; opacity: .8; }
   .se-node-label { font-size: 12.5px; font-weight: 700; fill: var(--ink); font-family: "Zen Kaku Gothic New", sans-serif; }
   .se-node-label.se-pending { fill: var(--ink-faint); }
+  .se-node-label.se-sibling-label { font-size: 11px; font-weight: 500; fill: var(--ink-faint); }
   .se-node-value { font-family: "JetBrains Mono", monospace; font-size: 11px; font-weight: 700; fill: var(--accent-ink); }
+  .se-node-value.se-sibling-value { fill: var(--ink-faint); font-weight: 500; }
   .se-edge { stroke: var(--line-strong); stroke-width: 2; fill: none; marker-end: url(#se-arrow-dim); transition: stroke .2s ease, stroke-width .2s ease; }
   .se-edge.se-computing { stroke: var(--warn); stroke-width: 2.6; marker-end: url(#se-arrow-warn); }
   .se-edge.se-final { stroke-width: 3.4; marker-end: url(#se-arrow-final); }
+  .se-edge.se-edge-sibling { stroke: var(--line); stroke-width: 1.3; stroke-dasharray: 3,2; marker-end: url(#se-arrow-sib); opacity: .7; }
   .se-scenario-banner {
     margin-top: 10px; font-size: 12.5px; background: var(--accent-soft); color: var(--accent-ink);
     border-left: 3px solid var(--accent); border-radius: 6px; padding: 8px 12px; line-height: 1.7;
@@ -4518,7 +4522,8 @@ function setStraightenOn(on) {
     let nodeBoxEls = [];
     let edgeEls = [];
 
-    const NODE_W = 420, NODE_H = 46, GAP = 30, PAD = 20;
+    const ROOT_W = 380, LEAF_W = 230, SIB_W = 150, BOX_H = 44, ROW_GAP = 46, PAD = 20, SIB_GAP = 10, VIEW_W = 680;
+    const MAX_SIBLINGS = 4;
 
     function buildSteps(walk, rootLabel) {
       const out = [];
@@ -4577,44 +4582,101 @@ function setStraightenOn(on) {
       return out;
     }
 
+    // 各段（レベル）を1本道の箱ではなく、親ノードのchildCandidates（比較された兄弟ノード）を
+    // 横に並べた「行」として組み立てる。採用されなかった兄弟も薄く表示することで、実際には
+    // 分岐のある木から「どれが最大だったか」で1本の経路が選ばれている様子を見せる。
+    // 末端行は、bottomNodeId自身のPL業種別内訳（plSumは合算なので「比較」ではなく「合算」）。
+    function buildRowsForScenario(sc) {
+      const L = sc.levels.length;
+      const rows = [];
+      rows.push({ levelIdx: 0, isLeafRow: false, boxes: [{ label: sc.levels[0].label, chosen: true }] });
+      for (let i = 1; i < L; i++) {
+        const parentEntry = sc.levels[i - 1].entry;
+        const chosenId = sc.levels[i].id;
+        const allCands = parentEntry.childCandidates || [];
+        let cands = allCands.slice(0, MAX_SIBLINGS);
+        if (!cands.some(c => c.id === chosenId)) {
+          const chosenCand = allCands.find(c => c.id === chosenId);
+          if (chosenCand) cands = cands.slice(0, MAX_SIBLINGS - 1).concat([chosenCand]);
+        }
+        let boxes = cands.map(c => ({
+          label: scoreNodesById.get(c.id).label, value: c.weightedVal, chosen: c.id === chosenId,
+        }));
+        if (!boxes.length) boxes = [{ label: sc.levels[i].label, chosen: true }];
+        rows.push({ levelIdx: i, isLeafRow: false, boxes });
+      }
+      const breakdown = sc.levels[L - 1].industryBreakdown || [];
+      const leafNode = scoreNodesById.get(sc.terminalEdge.target);
+      const leafBoxes = breakdown.length
+        ? breakdown.map(r => ({ label: r.industry + '/売上', value: r.mean, chosen: true }))
+        : [{ label: leafNode ? leafNode.label : sc.terminalEdge.target, chosen: true }];
+      rows.push({ levelIdx: L, isLeafRow: true, boxes: leafBoxes });
+      return rows;
+    }
+
+    function truncateLabel(label, boxW) {
+      const maxChars = boxW >= 350 ? 28 : (boxW >= 220 ? 18 : 12);
+      return label.length > maxChars ? label.slice(0, maxChars - 1) + '…' : label;
+    }
+
     function buildSvgForScenario(sc) {
       svg.innerHTML = '';
       const defs = svgEl('defs', {}, svg);
-      [['se-arrow-dim', 'var(--line-strong)'], ['se-arrow-warn', 'var(--warn)'], ['se-arrow-final', 'var(--mainpath)']].forEach(([id, color]) => {
+      [['se-arrow-dim', 'var(--line-strong)'], ['se-arrow-warn', 'var(--warn)'], ['se-arrow-final', 'var(--mainpath)'], ['se-arrow-sib', 'var(--ink-faint)']].forEach(([id, color]) => {
         const marker = svgEl('marker', { id, viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }, defs);
         svgEl('path', { d: 'M0,0 L10,5 L0,10 Z', fill: color }, marker);
       });
-      const L = sc.levels.length;
-      const totalBoxes = L + 1;
-      const centerX = NODE_W / 2 + PAD;
-      const h = PAD * 2 + totalBoxes * NODE_H + (totalBoxes - 1) * GAP;
-      svg.setAttribute('viewBox', `0 0 ${NODE_W + PAD * 2} ${h}`);
-      const yFor = i => PAD + i * (NODE_H + GAP);
-      nodeBoxEls = [];
+      const rows = buildRowsForScenario(sc);
+      const centerX = VIEW_W / 2;
+      const rowY = ri => PAD + ri * (BOX_H + ROW_GAP);
+      const h = PAD * 2 + rows.length * BOX_H + (rows.length - 1) * ROW_GAP;
+      svg.setAttribute('viewBox', `0 0 ${VIEW_W} ${h}`);
+
+      rows.forEach((row, ri) => {
+        const n = row.boxes.length;
+        const boxW = n === 1 ? (ri === 0 ? ROOT_W : (row.isLeafRow ? LEAF_W : SIB_W)) : SIB_W;
+        const totalW = n * boxW + (n - 1) * SIB_GAP;
+        const startX = centerX - totalW / 2;
+        row.boxes.forEach((box, bi) => {
+          box.x = startX + bi * (boxW + SIB_GAP);
+          box.w = boxW;
+          box.y = rowY(ri);
+        });
+      });
+
       edgeEls = [];
-      for (let i = 0; i < L; i++) {
-        const y1 = yFor(i) + NODE_H, y2 = yFor(i + 1);
-        const path = svgEl('path', { d: `M ${centerX} ${y1} L ${centerX} ${y2}`, class: 'se-edge' }, svg);
-        edgeEls.push(path);
+      for (let ri = 1; ri < rows.length; ri++) {
+        const prevChosen = rows[ri - 1].boxes.find(b => b.chosen);
+        const fromX = prevChosen.x + prevChosen.w / 2, fromY = prevChosen.y + BOX_H;
+        rows[ri].boxes.forEach(box => {
+          const toX = box.x + box.w / 2, toY = box.y;
+          const midY = (fromY + toY) / 2;
+          const d = `M ${fromX} ${fromY} C ${fromX} ${midY}, ${toX} ${midY}, ${toX} ${toY}`;
+          const path = svgEl('path', { d, class: 'se-edge' }, svg);
+          edgeEls.push({ el: path, levelIdx: rows[ri].levelIdx, chosen: box.chosen });
+        });
       }
-      for (let i = 0; i <= L; i++) {
-        const y = yFor(i);
-        const isLeaf = i === L;
-        const g = svgEl('g', {}, svg);
-        const rect = svgEl('rect', { x: PAD, y, width: NODE_W, height: NODE_H, rx: 10, class: 'se-node-box se-pending' }, g);
-        const rawLabel = isLeaf
-          ? (() => { const n = scoreNodesById.get(sc.terminalEdge.target); return n ? n.label : sc.terminalEdge.target; })()
-          : sc.levels[i].label;
-        const label = rawLabel.length > 30 ? rawLabel.slice(0, 29) + '…' : rawLabel;
-        const text = svgEl('text', { x: centerX, y: y + (isLeaf ? NODE_H / 2 + 4 : NODE_H / 2 - 4), 'text-anchor': 'middle', class: 'se-node-label se-pending' }, g);
-        text.textContent = label;
-        let valueText = null;
-        if (!isLeaf) {
-          valueText = svgEl('text', { x: centerX, y: y + NODE_H / 2 + 13, 'text-anchor': 'middle', class: 'se-node-value', style: 'display:none;' }, g);
-        }
-        if (isLeaf) rect.setAttribute('class', 'se-node-box se-leaf');
-        nodeBoxEls.push({ rect, text, valueText, isLeaf, levelIdx: isLeaf ? null : i });
-      }
+
+      nodeBoxEls = [];
+      rows.forEach(row => {
+        row.boxes.forEach(box => {
+          const g = svgEl('g', {}, svg);
+          const rect = svgEl('rect', { x: box.x, y: box.y, width: box.w, height: BOX_H, rx: 9, class: 'se-node-box se-pending' }, g);
+          const text = svgEl('text', {
+            x: box.x + box.w / 2, y: box.y + BOX_H / 2 - (box.chosen || row.isLeafRow ? 4 : 2),
+            'text-anchor': 'middle', class: 'se-node-label se-pending',
+          }, g);
+          text.textContent = truncateLabel(box.label, box.w);
+          let valueText = null;
+          if (box.chosen || row.isLeafRow || box.value != null) {
+            valueText = svgEl('text', {
+              x: box.x + box.w / 2, y: box.y + BOX_H - (box.chosen && !row.isLeafRow ? 6 : 8),
+              'text-anchor': 'middle', class: 'se-node-value', style: 'display:none;',
+            }, g);
+          }
+          nodeBoxEls.push({ rect, text, valueText, box, levelIdx: row.levelIdx, isLeafRow: row.isLeafRow });
+        });
+      });
     }
 
     function render() {
@@ -4635,14 +4697,45 @@ function setStraightenOn(on) {
       } else if (finalMode) {
         for (let j = 0; j < L; j++) doneSet.add(j);
       }
-      const revealed = new Set(doneSet);
-      if (computingIdx != null) revealed.add(computingIdx);
+      const valueRevealed = new Set(doneSet);
+      if (computingIdx != null) valueRevealed.add(computingIdx);
+      // 行の可視化タイミング：ボトムアップ（レベルL-1→0の順）で計算が進むため、レベルiの
+      // 行（iの箱＋その兄弟候補）は、レベルi自身の計算ステップに達した時点で表示する
+      // （その1つ下のレベルの計算ステップでは、まだiは比較の土俵にすら上がっていない）。
+      // 根（レベル0）は常に表示。末端行（レベルL）はボトムノード自身の計算ステップから表示。
+      function rowVisible(levelIdx) {
+        if (levelIdx === 0) return true;
+        if (finalMode) return true;
+        if (computingIdx == null) return false;
+        return computingIdx <= levelIdx;
+      }
 
       const scenarioColor = SCENARIO_PALETTE[step.scenarioIdx % SCENARIO_PALETTE.length];
       nodeBoxEls.forEach(nb => {
-        if (nb.isLeaf) {
+        const visible = rowVisible(nb.levelIdx);
+        nb.rect.style.display = visible ? '' : 'none';
+        nb.text.style.display = visible ? '' : 'none';
+        if (nb.valueText) nb.valueText.style.display = 'none';
+        if (!visible) return;
+
+        if (nb.isLeafRow) {
           nb.rect.setAttribute('class', 'se-node-box se-leaf' + (finalMode ? ' se-final' : ''));
           nb.rect.style.stroke = finalMode ? scenarioColor : '';
+          nb.text.setAttribute('class', 'se-node-label');
+          if (nb.valueText) {
+            nb.valueText.style.display = '';
+            nb.valueText.textContent = nb.box.value != null ? (nb.box.value > 0 ? '+' : '') + nb.box.value.toFixed(1) + '%' : '';
+          }
+          return;
+        }
+        if (!nb.box.chosen) {
+          nb.rect.setAttribute('class', 'se-node-box se-sibling');
+          nb.text.setAttribute('class', 'se-node-label se-sibling-label');
+          if (nb.valueText) {
+            nb.valueText.setAttribute('class', 'se-node-value se-sibling-value');
+            nb.valueText.style.display = '';
+            nb.valueText.textContent = nb.box.value != null ? fmt(nb.box.value) : '';
+          }
           return;
         }
         const i = nb.levelIdx;
@@ -4652,18 +4745,24 @@ function setStraightenOn(on) {
         if (finalMode) cls = 'se-node-box se-final';
         nb.rect.setAttribute('class', cls);
         nb.rect.style.stroke = finalMode ? scenarioColor : '';
-        nb.text.setAttribute('class', 'se-node-label' + (revealed.has(i) || finalMode ? '' : ' se-pending'));
-        const showVal = finalMode || revealed.has(i);
-        nb.valueText.style.display = showVal ? '' : 'none';
-        if (showVal) nb.valueText.textContent = 'raw ' + fmt(sc.levels[i].entry.raw);
+        nb.text.setAttribute('class', 'se-node-label' + (valueRevealed.has(i) || finalMode ? '' : ' se-pending'));
+        const showVal = finalMode || valueRevealed.has(i);
+        if (nb.valueText) {
+          nb.valueText.style.display = showVal ? '' : 'none';
+          if (showVal) nb.valueText.textContent = 'raw ' + fmt(sc.levels[i].entry.raw);
+        }
       });
-      edgeEls.forEach((edgePath, i) => {
-        let cls = 'se-edge';
-        if (finalMode) cls += ' se-final';
-        else if (i === computingIdx) cls += ' se-computing';
-        edgePath.setAttribute('class', cls);
-        edgePath.style.stroke = finalMode ? scenarioColor : '';
-        edgePath.style.opacity = (finalMode || revealed.has(i)) ? '1' : '.2';
+      edgeEls.forEach(({ el, levelIdx, chosen }) => {
+        const visible = rowVisible(levelIdx);
+        el.style.display = visible ? '' : 'none';
+        if (!visible) return;
+        let cls = 'se-edge' + (chosen ? '' : ' se-edge-sibling');
+        if (chosen) {
+          if (finalMode) cls += ' se-final';
+          else if (levelIdx === computingIdx) cls += ' se-computing';
+        }
+        el.setAttribute('class', cls);
+        el.style.stroke = (chosen && finalMode) ? scenarioColor : '';
       });
 
       stepTitleEl.textContent = step.title;
