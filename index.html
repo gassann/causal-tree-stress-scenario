@@ -415,6 +415,10 @@
   .se-edge.se-computing { stroke: var(--warn); stroke-width: 2.6; marker-end: url(#se-arrow-warn); }
   .se-edge.se-final { stroke-width: 3.4; marker-end: url(#se-arrow-final); }
   .se-edge.se-edge-sibling { stroke: var(--line); stroke-width: 1.3; stroke-dasharray: 3,2; marker-end: url(#se-arrow-sib); opacity: .7; }
+  .se-edge-weight-bg { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1; opacity: .92; }
+  .se-edge-weight-bg.se-edge-weight-chosen { stroke: var(--accent); }
+  .se-edge-weight-text { font-family: "JetBrains Mono", monospace; font-size: 9.5px; font-weight: 600; fill: var(--ink-faint); text-anchor: middle; }
+  .se-edge-weight-text.se-edge-weight-chosen-text { fill: var(--accent-ink); font-weight: 700; }
   .se-scenario-banner {
     margin-top: 10px; font-size: 12.5px; background: var(--accent-soft); color: var(--accent-ink);
     border-left: 3px solid var(--accent); border-radius: 6px; padding: 8px 12px; line-height: 1.7;
@@ -4530,7 +4534,7 @@ function setStraightenOn(on) {
       out.push({
         kind: 'intro', scenarioIdx: 0,
         title: 'STEP 0 — 考え方',
-        body: `起点ノード「<b>${escapeHtml(rootLabel)}</b>」を例に、実際のツリーの実データ・実ロジックで解説します。各ノードのスコア（<b>raw</b>）は「自分から直接PLにつながる増減率の合計（業種別にプールしたトリム平均の総和）」と「子ノードの中で<b>重み×子のrawが最大の1つ</b>」を足したものです。末端（PLに一番近いノード）から根に向かって、実際のツリーの計算順そのままに1段ずつ求めていきます。`,
+        body: `起点ノード「<b>${escapeHtml(rootLabel)}</b>」を例に、実際のツリーの実データ・実ロジックで解説します。木構造は最初から全体を表示しています。エッジ上の<b>×0.75</b>のような数字がそのエッジの蓋然性の重みで、各箱の<b>「仮スコア」</b>は「重み×子のraw」の値です。同じ行に並ぶ箱は、親ノードがその中から子を選ぶ際に実際に比較した候補（点線＝不採用、実線＝採用）で、<b>仮スコアが最大のもの</b>が選ばれています。末端は業種別PLの内訳（こちらは比較ではなく合算）です。`,
         formula: null,
       });
       walk.scenarios.forEach((sc, k) => {
@@ -4589,7 +4593,7 @@ function setStraightenOn(on) {
     function buildRowsForScenario(sc) {
       const L = sc.levels.length;
       const rows = [];
-      rows.push({ levelIdx: 0, isLeafRow: false, boxes: [{ label: sc.levels[0].label, chosen: true }] });
+      rows.push({ levelIdx: 0, isLeafRow: false, boxes: [{ label: sc.levels[0].label, chosen: true, isRoot: true, raw: sc.levels[0].entry.raw }] });
       for (let i = 1; i < L; i++) {
         const parentEntry = sc.levels[i - 1].entry;
         const chosenId = sc.levels[i].id;
@@ -4599,10 +4603,14 @@ function setStraightenOn(on) {
           const chosenCand = allCands.find(c => c.id === chosenId);
           if (chosenCand) cands = cands.slice(0, MAX_SIBLINGS - 1).concat([chosenCand]);
         }
+        // 箱に表示する数値は「仮のスコア」＝蓋然性の重み×子のraw（weightedVal）で統一する。
+        // 採用された箱・比較のみで落選した箱を同じ指標で並べることで、最大値が選ばれている
+        // ことが一目でわかるようにする。
         let boxes = cands.map(c => ({
-          label: scoreNodesById.get(c.id).label, value: c.weightedVal, chosen: c.id === chosenId,
+          label: scoreNodesById.get(c.id).label, value: c.weightedVal, weight: c.weight, raw: c.raw,
+          chosen: c.id === chosenId,
         }));
-        if (!boxes.length) boxes = [{ label: sc.levels[i].label, chosen: true }];
+        if (!boxes.length) boxes = [{ label: sc.levels[i].label, chosen: true, raw: sc.levels[i].entry.raw }];
         rows.push({ levelIdx: i, isLeafRow: false, boxes });
       }
       const breakdown = sc.levels[L - 1].industryBreakdown || [];
@@ -4648,12 +4656,27 @@ function setStraightenOn(on) {
       for (let ri = 1; ri < rows.length; ri++) {
         const prevChosen = rows[ri - 1].boxes.find(b => b.chosen);
         const fromX = prevChosen.x + prevChosen.w / 2, fromY = prevChosen.y + BOX_H;
+        const isLeafEdgeRow = rows[ri].isLeafRow;
         rows[ri].boxes.forEach(box => {
           const toX = box.x + box.w / 2, toY = box.y;
           const midY = (fromY + toY) / 2;
           const d = `M ${fromX} ${fromY} C ${fromX} ${midY}, ${toX} ${midY}, ${toX} ${toY}`;
           const path = svgEl('path', { d, class: 'se-edge' }, svg);
           edgeEls.push({ el: path, levelIdx: rows[ri].levelIdx, chosen: box.chosen });
+          // エッジ上に蓋然性の重み（確率）をラベル表示する。末端（PL業種内訳）行への
+          // エッジは合算であり重みの概念が無いため対象外。
+          if (!isLeafEdgeRow && box.weight != null) {
+            const labelX = (fromX + toX) / 2, labelY = midY;
+            const bg = svgEl('rect', {
+              x: labelX - 19, y: labelY - 8, width: 38, height: 14, rx: 6, class: 'se-edge-weight-bg',
+            }, svg);
+            const label = svgEl('text', {
+              x: labelX, y: labelY + 3, 'text-anchor': 'middle', class: 'se-edge-weight-text',
+            }, svg);
+            label.textContent = '×' + box.weight.toFixed(2);
+            edgeEls[edgeEls.length - 1].weightBg = bg;
+            edgeEls[edgeEls.length - 1].weightLabel = label;
+          }
         });
       }
 
@@ -4663,14 +4686,14 @@ function setStraightenOn(on) {
           const g = svgEl('g', {}, svg);
           const rect = svgEl('rect', { x: box.x, y: box.y, width: box.w, height: BOX_H, rx: 9, class: 'se-node-box se-pending' }, g);
           const text = svgEl('text', {
-            x: box.x + box.w / 2, y: box.y + BOX_H / 2 - (box.chosen || row.isLeafRow ? 4 : 2),
+            x: box.x + box.w / 2, y: box.y + BOX_H / 2 - (box.isRoot || row.isLeafRow ? 4 : 2),
             'text-anchor': 'middle', class: 'se-node-label se-pending',
           }, g);
           text.textContent = truncateLabel(box.label, box.w);
           let valueText = null;
-          if (box.chosen || row.isLeafRow || box.value != null) {
+          if (box.isRoot || row.isLeafRow || box.value != null) {
             valueText = svgEl('text', {
-              x: box.x + box.w / 2, y: box.y + BOX_H - (box.chosen && !row.isLeafRow ? 6 : 8),
+              x: box.x + box.w / 2, y: box.y + BOX_H - (box.isRoot || row.isLeafRow ? 8 : 6),
               'text-anchor': 'middle', class: 'se-node-value', style: 'display:none;',
             }, g);
           }
@@ -4687,44 +4710,35 @@ function setStraightenOn(on) {
         buildSvgForScenario(sc);
         builtScenarioKey = step.scenarioIdx;
       }
-      const L = sc.levels.length;
       const finalMode = step.kind === 'final';
-      const doneSet = new Set();
-      let computingIdx = null;
-      if (step.kind === 'level') {
-        computingIdx = step.levelIdx;
-        for (let j = step.levelIdx + 1; j < L; j++) doneSet.add(j);
-      } else if (finalMode) {
-        for (let j = 0; j < L; j++) doneSet.add(j);
-      }
-      const valueRevealed = new Set(doneSet);
-      if (computingIdx != null) valueRevealed.add(computingIdx);
-      // 行の可視化タイミング：ボトムアップ（レベルL-1→0の順）で計算が進むため、レベルiの
-      // 行（iの箱＋その兄弟候補）は、レベルi自身の計算ステップに達した時点で表示する
-      // （その1つ下のレベルの計算ステップでは、まだiは比較の土俵にすら上がっていない）。
-      // 根（レベル0）は常に表示。末端行（レベルL）はボトムノード自身の計算ステップから表示。
-      function rowVisible(levelIdx) {
-        if (levelIdx === 0) return true;
-        if (finalMode) return true;
-        if (computingIdx == null) return false;
-        return computingIdx <= levelIdx;
-      }
+      const computingIdx = step.kind === 'level' ? step.levelIdx : null;
 
+      // ツリー全体（全段・全候補・最終末端まで）は常に最初から表示しておき、ステップ送りは
+      // 「今どのノードの話をしているか」のハイライト（計算中／採用経路）だけを進める。
       const scenarioColor = SCENARIO_PALETTE[step.scenarioIdx % SCENARIO_PALETTE.length];
       nodeBoxEls.forEach(nb => {
-        const visible = rowVisible(nb.levelIdx);
-        nb.rect.style.display = visible ? '' : 'none';
-        nb.text.style.display = visible ? '' : 'none';
-        if (nb.valueText) nb.valueText.style.display = 'none';
-        if (!visible) return;
+        nb.rect.style.display = '';
+        nb.text.style.display = '';
+        nb.text.setAttribute('class', 'se-node-label');
 
         if (nb.isLeafRow) {
           nb.rect.setAttribute('class', 'se-node-box se-leaf' + (finalMode ? ' se-final' : ''));
           nb.rect.style.stroke = finalMode ? scenarioColor : '';
-          nb.text.setAttribute('class', 'se-node-label');
           if (nb.valueText) {
             nb.valueText.style.display = '';
             nb.valueText.textContent = nb.box.value != null ? (nb.box.value > 0 ? '+' : '') + nb.box.value.toFixed(1) + '%' : '';
+          }
+          return;
+        }
+        if (nb.box.isRoot) {
+          let cls = 'se-node-box';
+          if (nb.levelIdx === computingIdx) cls += ' se-computing';
+          if (finalMode) cls += ' se-final';
+          nb.rect.setAttribute('class', cls);
+          nb.rect.style.stroke = finalMode ? scenarioColor : '';
+          if (nb.valueText) {
+            nb.valueText.style.display = '';
+            nb.valueText.textContent = 'raw ' + fmt(nb.box.raw);
           }
           return;
         }
@@ -4734,28 +4748,22 @@ function setStraightenOn(on) {
           if (nb.valueText) {
             nb.valueText.setAttribute('class', 'se-node-value se-sibling-value');
             nb.valueText.style.display = '';
-            nb.valueText.textContent = nb.box.value != null ? fmt(nb.box.value) : '';
+            nb.valueText.textContent = nb.box.value != null ? '仮' + fmt(nb.box.value) : '';
           }
           return;
         }
         const i = nb.levelIdx;
-        let cls = 'se-node-box se-pending';
+        let cls = 'se-node-box';
         if (i === computingIdx) cls = 'se-node-box se-computing';
-        else if (doneSet.has(i)) cls = 'se-node-box';
         if (finalMode) cls = 'se-node-box se-final';
         nb.rect.setAttribute('class', cls);
         nb.rect.style.stroke = finalMode ? scenarioColor : '';
-        nb.text.setAttribute('class', 'se-node-label' + (valueRevealed.has(i) || finalMode ? '' : ' se-pending'));
-        const showVal = finalMode || valueRevealed.has(i);
         if (nb.valueText) {
-          nb.valueText.style.display = showVal ? '' : 'none';
-          if (showVal) nb.valueText.textContent = 'raw ' + fmt(sc.levels[i].entry.raw);
+          nb.valueText.style.display = '';
+          nb.valueText.textContent = nb.box.value != null ? '◎仮' + fmt(nb.box.value) : '';
         }
       });
-      edgeEls.forEach(({ el, levelIdx, chosen }) => {
-        const visible = rowVisible(levelIdx);
-        el.style.display = visible ? '' : 'none';
-        if (!visible) return;
+      edgeEls.forEach(({ el, levelIdx, chosen, weightBg, weightLabel }) => {
         let cls = 'se-edge' + (chosen ? '' : ' se-edge-sibling');
         if (chosen) {
           if (finalMode) cls += ' se-final';
@@ -4763,6 +4771,8 @@ function setStraightenOn(on) {
         }
         el.setAttribute('class', cls);
         el.style.stroke = (chosen && finalMode) ? scenarioColor : '';
+        if (weightBg) weightBg.setAttribute('class', 'se-edge-weight-bg' + (chosen ? ' se-edge-weight-chosen' : ''));
+        if (weightLabel) weightLabel.setAttribute('class', 'se-edge-weight-text' + (chosen ? ' se-edge-weight-chosen-text' : ''));
       });
 
       stepTitleEl.textContent = step.title;
