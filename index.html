@@ -680,7 +680,7 @@
     <div class="pl-heatmap-wrap" id="causeHeatmapWrap"></div>
   </section>
 
-  <footer class="hint">エッジにマウスオーバーすると根拠となった会社名・原文を表示します。上部のタグで業種を絞り込めます（複数選択可）。<strong>点線のエッジは資料に直接の記載がないAI推測</strong>による接続です（ホバーで推論理由を表示）。<strong>「ノード限定」</strong>をオンにしてノードをクリックすると、そのノードにつながる上流・下流だけに絞り込んで表示します。<strong>「企業影響無しノード非表示」</strong>をオンにすると、下流を辿っても実在企業のPLにネガティブな影響が及ばないノードを隠します。</footer>
+  <footer class="hint">エッジにマウスオーバーすると根拠となった会社名・原文を表示します。上部のタグで業種を絞り込めます（複数選択可）。<strong>点線のエッジは資料に直接の記載がないAI推測</strong>による接続です（ホバーで推論理由を表示）。<strong>「ノード限定」</strong>をオンにしてノードをクリックすると、そのノードにつながる上流・下流だけに絞り込んで表示します。<strong>「企業へのネガティブ影響なしノード非表示」</strong>をオンにすると、下流を辿っても実在企業のPLにネガティブな影響が及ばないノード（影響が無い、または増収・増益などポジティブな影響しか無いノード）を隠します。</footer>
 </div>
 
 <div id="tooltip"></div>
@@ -717,9 +717,9 @@ function setMergeViewOn(on) {
   location.reload();
 }
 const MERGE_SCOPE_ROOT_LABEL = 'ホルムズ海峡封鎖';
-// 「企業影響無しノード非表示」がデフォルトでオンの状態と同じ基準（実在企業のPLに
+// 「企業へのネガティブ影響なしノード非表示」がデフォルトでオンの状態と同じ基準（実在企業のPLに
 // ネガティブな影響が及ぶノード、およびそこへ辿り着ける祖先ノード）で、それ以外の
-// ノード（企業影響無しノード非表示をオンにすると隠れるノード）は「兄弟ノード」の
+// ノード（企業へのネガティブ影響なしノード非表示をオンにすると隠れるノード）は「兄弟ノード」の
 // カウントから除外する。フィルタ後の見た目を基準に統合可否を判断するため。
 const REPORT_OR_AI_NAMES = new Set(['AI推測', 'みずほマンスリーレポート', '三菱UFJリサーチ&コンサルティング', '大和総研', 'A社']);
 // 実データの増減率%からスコア・影響度を機械的に算出する際（computeExcludeBest／
@@ -814,7 +814,7 @@ function computeAutoMergedData(data) {
     return detour;
   }
   // 次数は「別ノードの数」で数える（同じ相手への複数出典エッジを別々の兄弟として
-  // 数えないため）。相手が「企業影響無しノード非表示」で隠れるノードの場合、または
+  // 数えないため）。相手が「企業へのネガティブ影響なしノード非表示」で隠れるノードの場合、または
   // 迂回路により直接エッジ自体が隠れる場合も、兄弟としてカウントしない
   // （フィルタ後の見た目を基準にするため）。
   function scopedDeg(id) {
@@ -1092,7 +1092,7 @@ function setStraightenOn(on) {
   // ノードの影響度・蓋然性は、統合時に元ノードの平均値へ書き換え済み。computeAutoMergedData
   // 側を参照）。そのため、レンダリング用のnodesById/baseNodesById等と同じ（統合込みの）
   // グラフをそのまま使う。名前だけシナリオ計算専用のものを用意しているのは、迂回路が
-  // ある直接エッジを非表示・ノード非表示・企業影響無しノード非表示・Step2ノードを非表示
+  // ある直接エッジを非表示・ノード非表示・企業へのネガティブ影響なしノード非表示・Step2ノードを非表示
   // といった「ツリー構造を決めるタグ」をシナリオ計算にも反映する既存のコードをそのまま
   // 活かすため（これらのタグは表示にもシナリオ計算にも同じグラフを基準に反映される）。
   const scoreBaseNodesById = baseNodesById;
@@ -1268,7 +1268,7 @@ function setStraightenOn(on) {
   // したツリーを表示」）、falseなら従来通り「上流・下流の両方」（「ノード限定」タグ）。
   let isolationDescendantsOnly = false;
   // showIsolationFocus()は呼ばれた時点のスナップショットSVGを作るだけで、以後の表示系
-  // タグ（企業影響無しノード非表示・ポジティブなPLノードを表示など）の切り替えには自動
+  // タグ（企業へのネガティブ影響なしノード非表示・ポジティブなPLノードを表示など）の切り替えには自動
   // 追従しない。絞り込みビューを開いている間にそれらを切り替えたら呼び直す。
   function refreshIsolationIfOpen() {
     if (isolationFocusId) showIsolationFocus(isolationFocusId, isolationDescendantsOnly);
@@ -1895,8 +1895,8 @@ function setStraightenOn(on) {
   let hideNoImpactNodes = true;
   const impactFilterChip = document.createElement('span');
   impactFilterChip.className = 'chip' + (hideNoImpactNodes ? ' active' : '');
-  impactFilterChip.textContent = '企業影響無しノード非表示';
-  impactFilterChip.title = 'オンにすると、下流を辿っても実在企業のPL（勘定科目）にネガティブな影響が及ばないノードを非表示にします（増収・増益などポジティブな影響しか無いノードも隠します）。「PLノードを非表示」と併用した場合も、PLノードを含む元のデータで判定した影響の有無で絞り込みます。';
+  impactFilterChip.textContent = '企業へのネガティブ影響なしノード非表示';
+  impactFilterChip.title = 'オンにすると、下流を辿っても実在企業のPL（勘定科目）にネガティブな影響が及ばないノードを非表示にします。影響が全く無いノードだけでなく、増収・増益などポジティブな影響しか無いノードも「ネガティブ影響なし」として隠します。「PLノードを非表示」と併用した場合も、PLノードを含む元のデータで判定した影響の有無で絞り込みます。';
   impactFilterChip.addEventListener('click', () => {
     hideNoImpactNodes = !hideNoImpactNodes;
     impactFilterChip.classList.toggle('active', hideNoImpactNodes);
@@ -3542,7 +3542,7 @@ function setStraightenOn(on) {
   function showIsolationFocus(focusId, descendantsOnly) {
     isolationDescendantsOnly = !!descendantsOnly;
     const isoSet = computeIsolationSet(focusId, isolationDescendantsOnly);
-    // 「企業影響無しノード非表示」は、辿った先のどこかで実在企業のPLに影響するかどうかを
+    // 「企業へのネガティブ影響なしノード非表示」は、辿った先のどこかで実在企業のPLにネガティブな影響が及ぶかどうかを
     // 無制限の深さで判定している（companyImpactKeepSet自体がBFSで作られている）ため、
     // この絞り込みを適用しても「深い階層のノードが切り捨てられる」ことはない。ここで
     // 本当に消えるのは、辿っても実在企業の影響に一切繋がらない枝だけなので、起点にした
@@ -3740,7 +3740,7 @@ function setStraightenOn(on) {
     ]);
 
     const plNodeIds = DATA_BASE.nodes
-      .filter(n => n.industry && n.industry !== '全般' && !isBsLabel(n.label) && PL_HEATMAP_GENERIC_LABELS.has(n.label))
+      .filter(n => n.industry && n.industry !== '全般' && !isBsLabel(n.label))
       .map(n => n.id);
     const plNodeSet = new Set(plNodeIds);
     if (plNodeIds.length === 0) { wrap.textContent = '対象データがありません。'; return; }
