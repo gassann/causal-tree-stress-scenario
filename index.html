@@ -4536,7 +4536,7 @@ function setStraightenOn(on) {
       out.push({
         kind: 'intro', scenarioIdx: 0,
         title: 'STEP 0 — 考え方',
-        body: `起点ノード「<b>${escapeHtml(rootLabel)}</b>」を例に、実際のツリーの実データ・実ロジックで解説します。木構造は最初から全体を表示しています。各箱の<b>raw</b>はそのノード自身の値です。エッジ上の<b>×0.75</b>は蓋然性の重み、その下の<b>「仮スコア」</b>は「重み×子のraw」＝親から見たこのエッジの寄与分です。同じ行に並ぶ箱は、親ノードが子を選ぶ際に実際に比較した候補（点線＝不採用、実線＝採用）で、<b>エッジの仮スコアが最大のもの</b>が選ばれています。末端は業種別PLの内訳（こちらは比較ではなく合算）です。`,
+        body: `起点ノード「<b>${escapeHtml(rootLabel)}</b>」を例に、実際のツリーの実データ・実ロジックで解説します。木の形（箱・エッジ）は最初から全体を表示していますが、各箱の<b>スコア</b>（ノード自身の値）とエッジ下の<b>スコア</b>（「重み×子のスコア」＝親から見たこのエッジの寄与分）は、末端から根に向かう実際の計算順で1段ずつ明らかにしていきます。エッジ上の<b>×0.75</b>は蓋然性の重みで、これは最初から表示済みです。同じ行に並ぶ箱は、親ノードが子を選ぶ際に実際に比較した候補（点線＝不採用、実線＝採用）で、<b>エッジのスコアが最大のもの</b>が選ばれています。末端は業種別PLの内訳（こちらは比較ではなく合算）です。`,
         formula: null,
       });
       walk.scenarios.forEach((sc, k) => {
@@ -4570,8 +4570,8 @@ function setStraightenOn(on) {
           out.push({
             kind: 'level', scenarioIdx: k, levelIdx: j,
             title: `STEP — ${escapeHtml(lv.label)}`,
-            body: `<b>${escapeHtml(lv.label)}</b> のスコア（raw）を求めます。直接PL合計 ${fmt(entry.plSum)} ＋ 子ノード経由（最大値） ${fmt(childVal)} ＝ raw <b>${fmt(entry.raw)}</b>。経路の先は${pickedSide}側を採用。`,
-            formula: `直接PL合計: ${fmt(entry.plSum)}\n${plLines}\n\n子ノード経由（最大値を採用）: ${fmt(childVal)}\n${childLine}\n\nraw = ${fmt(entry.plSum)} + ${fmt(childVal)} = ${fmt(entry.raw)}`,
+            body: `<b>${escapeHtml(lv.label)}</b> のスコアを求めます。直接PL合計 ${fmt(entry.plSum)} ＋ 子ノード経由（最大値） ${fmt(childVal)} ＝ スコア <b>${fmt(entry.raw)}</b>。経路の先は${pickedSide}側を採用。`,
+            formula: `直接PL合計: ${fmt(entry.plSum)}\n${plLines}\n\n子ノード経由（最大値を採用）: ${fmt(childVal)}\n${childLine}\n\nスコア = ${fmt(entry.plSum)} + ${fmt(childVal)} = ${fmt(entry.raw)}`,
           });
         }
         const rootRaw = sc.levels[0].entry.raw;
@@ -4581,8 +4581,8 @@ function setStraightenOn(on) {
         out.push({
           kind: 'final', scenarioIdx: k,
           title: `STEP — 第${k + 1}シナリオ確定`,
-          body: `根「${escapeHtml(rootLabel)}」の raw は ${fmt(rootRaw)}。根には入ってくるエッジが無いため、根自身の蓋然性による重み ${walk.rootProb.toFixed(2)} を最後に1回だけ掛けます。スコア = ${walk.rootProb.toFixed(2)} × ${fmt(rootRaw)} = <b>${scoreText}</b>。`,
-          formula: `経路：${pathLabels.join(' → ')}\n\nスコア = 根の蓋然性の重み ${walk.rootProb.toFixed(2)} × raw(根) ${fmt(rootRaw)} = ${scoreText}`,
+          body: `根「${escapeHtml(rootLabel)}」のスコアは ${fmt(rootRaw)}。根には入ってくるエッジが無いため、根自身の蓋然性による重み ${walk.rootProb.toFixed(2)} を最後に1回だけ掛けます。最終スコア = ${walk.rootProb.toFixed(2)} × ${fmt(rootRaw)} = <b>${scoreText}</b>。`,
+          formula: `経路：${pathLabels.join(' → ')}\n\n最終スコア = 根の蓋然性の重み ${walk.rootProb.toFixed(2)} × スコア(根) ${fmt(rootRaw)} = ${scoreText}`,
         });
       });
       return out;
@@ -4681,7 +4681,7 @@ function setStraightenOn(on) {
             const scoreLine = svgEl('text', {
               x: labelX, y: labelY + 10, 'text-anchor': 'middle', class: 'se-edge-score-text',
             }, svg);
-            scoreLine.textContent = '仮' + fmt(box.value);
+            scoreLine.textContent = 'スコア' + fmt(box.value);
             edgeEls[edgeEls.length - 1].weightBg = bg;
             edgeEls[edgeEls.length - 1].weightLabel = weightLine;
             edgeEls[edgeEls.length - 1].scoreLabel = scoreLine;
@@ -4722,20 +4722,28 @@ function setStraightenOn(on) {
       const finalMode = step.kind === 'final';
       const computingIdx = step.kind === 'level' ? step.levelIdx : null;
 
-      // ツリー全体（全段・全候補・最終末端まで）は常に最初から表示しておき、ステップ送りは
-      // 「今どのノードの話をしているか」のハイライト（計算中／採用経路）だけを進める。
+      // 木の形（箱・ラベル・エッジ・蓋然性の重み）は常に最初から全体を表示する一方、
+      // 各箱・各エッジの「スコア」数値はボトムアップの計算順通りに1段ずつ明らかにする
+      // （そのレベル自身の計算ステップに達するまでは、スコアの数字だけを隠す）。
+      function scoreRevealed(levelIdx) {
+        if (finalMode) return true;
+        if (computingIdx == null) return false;
+        return computingIdx <= levelIdx;
+      }
+
       const scenarioColor = SCENARIO_PALETTE[step.scenarioIdx % SCENARIO_PALETTE.length];
       nodeBoxEls.forEach(nb => {
         nb.rect.style.display = '';
         nb.text.style.display = '';
         nb.text.setAttribute('class', 'se-node-label');
+        const revealed = scoreRevealed(nb.levelIdx);
 
         if (nb.isLeafRow) {
           nb.rect.setAttribute('class', 'se-node-box se-leaf' + (finalMode ? ' se-final' : ''));
           nb.rect.style.stroke = finalMode ? scenarioColor : '';
           if (nb.valueText) {
-            nb.valueText.style.display = '';
-            nb.valueText.textContent = nb.box.value != null ? (nb.box.value > 0 ? '+' : '') + nb.box.value.toFixed(1) + '%' : '';
+            nb.valueText.style.display = revealed ? '' : 'none';
+            nb.valueText.textContent = (revealed && nb.box.value != null) ? (nb.box.value > 0 ? '+' : '') + nb.box.value.toFixed(1) + '%' : '';
           }
           return;
         }
@@ -4746,8 +4754,8 @@ function setStraightenOn(on) {
           nb.rect.setAttribute('class', cls);
           nb.rect.style.stroke = finalMode ? scenarioColor : '';
           if (nb.valueText) {
-            nb.valueText.style.display = '';
-            nb.valueText.textContent = 'raw ' + fmt(nb.box.raw);
+            nb.valueText.style.display = revealed ? '' : 'none';
+            nb.valueText.textContent = revealed ? 'スコア ' + fmt(nb.box.raw) : '';
           }
           return;
         }
@@ -4756,8 +4764,8 @@ function setStraightenOn(on) {
           nb.text.setAttribute('class', 'se-node-label se-sibling-label');
           if (nb.valueText) {
             nb.valueText.setAttribute('class', 'se-node-value se-sibling-value');
-            nb.valueText.style.display = '';
-            nb.valueText.textContent = nb.box.raw != null ? 'raw ' + fmt(nb.box.raw) : '';
+            nb.valueText.style.display = revealed ? '' : 'none';
+            nb.valueText.textContent = (revealed && nb.box.raw != null) ? 'スコア ' + fmt(nb.box.raw) : '';
           }
           return;
         }
@@ -4768,8 +4776,8 @@ function setStraightenOn(on) {
         nb.rect.setAttribute('class', cls);
         nb.rect.style.stroke = finalMode ? scenarioColor : '';
         if (nb.valueText) {
-          nb.valueText.style.display = '';
-          nb.valueText.textContent = nb.box.raw != null ? 'raw ' + fmt(nb.box.raw) : '';
+          nb.valueText.style.display = revealed ? '' : 'none';
+          nb.valueText.textContent = (revealed && nb.box.raw != null) ? 'スコア ' + fmt(nb.box.raw) : '';
         }
       });
       edgeEls.forEach(({ el, levelIdx, chosen, weightBg, weightLabel, scoreLabel }) => {
@@ -4782,7 +4790,11 @@ function setStraightenOn(on) {
         el.style.stroke = (chosen && finalMode) ? scenarioColor : '';
         if (weightBg) weightBg.setAttribute('class', 'se-edge-weight-bg' + (chosen ? ' se-edge-weight-chosen' : ''));
         if (weightLabel) weightLabel.setAttribute('class', 'se-edge-weight-text' + (chosen ? ' se-edge-weight-chosen-text' : ''));
-        if (scoreLabel) scoreLabel.setAttribute('class', 'se-edge-score-text' + (chosen ? ' se-edge-score-chosen-text' : ''));
+        if (scoreLabel) {
+          const revealed = scoreRevealed(levelIdx);
+          scoreLabel.style.display = revealed ? '' : 'none';
+          scoreLabel.setAttribute('class', 'se-edge-score-text' + (chosen ? ' se-edge-score-chosen-text' : ''));
+        }
       });
 
       stepTitleEl.textContent = step.title;
