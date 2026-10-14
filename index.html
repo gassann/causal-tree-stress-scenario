@@ -1694,7 +1694,11 @@ function setStraightenOn(on) {
     // （同じ子ノードへ複数本のエッジ（会社違い等）がある場合は、その中で最も重みが大きいものを
     // 代表として残す。bestChildの選定自体も元々エッジ単位で見ているため、結果は変わらない。）
     node.out.forEach(e => {
-      if (!scoredIds.has(e.target) || scoreNodesById.get(e.target).industry) return; // PL先は合計側で扱う
+      // 子ノード自身に影響度(1-4)が設定されているかは問わない（それはscoredRootsが
+      // どこから計算を始めるかの基準であって、途中のノードを辿れる条件ではない）。
+      // 未評価の中間ノードでも、さらに下流に評価済みノードやPL直結ノードがあれば
+      // そこまで辿って計算する。PL先（業種別ノード）は合計側(plSum)で扱うため対象外。
+      if (scoreNodesById.get(e.target).industry) return;
       if (isRedundantEdge(id, e.target)) return; // 迂回路により非表示になっている直接エッジは無いものとして扱う
       if (isManuallyHiddenNode(scoreNodesById.get(e.target))) return; // 手動で非表示にしたノードは除外後のツリーとして扱う
       if (isStep2ScoreExcluded(e.target)) return; // Step2ノードを非表示にしている場合は除外後のツリーとして扱う
@@ -2848,10 +2852,12 @@ function setStraightenOn(on) {
   function buildNodeScoreTooltipHtml(id) {
     const n = scoreNodesById.get(id);
     const header = `<div class="tt-company">${escapeHtml(n.label)}</div>`;
-    if (!scoredIds.has(id)) {
-      return header + '<div class="tt-cr">影響度・蓋然性が未設定のため、スコア計算（試験版・一部ノードのみ対象）の対象外です。</div>';
-    }
     if (scoreMode !== 'exclude') {
+      // 影響度×蓋然性／マトリクス色ゾーンは、ノード自身に影響度(1-4)が設定されている
+      // ことが前提（下流に評価済みノードがあっても代わりにはならない）。
+      if (!scoredIds.has(id)) {
+        return header + '<div class="tt-cr">影響度・蓋然性が未設定のため、スコア計算（試験版・一部ノードのみ対象）の対象外です。</div>';
+      }
       const score = nodeScore(id);
       const maxLabel = scoreMode === 'zone' ? '最大4点' : '最大16点';
       const formula = scoreMode === 'zone'
