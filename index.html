@@ -1053,6 +1053,8 @@ function setStraightenOn(on) {
     refreshIsolationIfOpen();
     updateManualHideResetChip();
     invalidateExcludeScoreCache();
+    refreshPlHeatmapFilters();
+    refreshCauseHeatmap();
     if (scenariosShown) applyScenarioDisplay();
   }
   function resetManualHidden() {
@@ -1063,6 +1065,8 @@ function setStraightenOn(on) {
     refreshIsolationIfOpen();
     updateManualHideResetChip();
     invalidateExcludeScoreCache();
+    refreshPlHeatmapFilters();
+    refreshCauseHeatmap();
     if (scenariosShown) applyScenarioDisplay();
   }
 
@@ -1927,6 +1931,8 @@ function setStraightenOn(on) {
     refreshIsolationIfOpen();
     invalidateExcludeScoreCache();
     allScoredPaths = computeAllScoredPaths();
+    refreshPlHeatmapFilters();
+    refreshCauseHeatmap();
     if (scenariosShown) applyScenarioDisplay();
   });
   structureFilterRow.appendChild(step2FilterChip);
@@ -2038,6 +2044,8 @@ function setStraightenOn(on) {
     applyVisibility();
     refreshIsolationIfOpen();
     invalidateExcludeScoreCache();
+    refreshPlHeatmapFilters();
+    refreshCauseHeatmap();
     if (scenariosShown) applyScenarioDisplay();
   });
   structureFilterRow.appendChild(redundantEdgeChip);
@@ -3655,6 +3663,12 @@ function setStraightenOn(on) {
   let updatePlHeatmap = function () {}; // ノードのclickから呼ばれる（renderGraphSvg定義より前で使われるため関数式で先に宣言）
   let refreshPlHeatmapSimplify = function () {}; // 「簡略化して表示」チップから呼ばれる（同上の理由で先に宣言）
   let plHeatmapSimplify = false;
+  // 迂回路非表示・手動非表示・Step2非表示のトグルはいずれもisRedundantEdge/
+  // isManuallyHiddenNode/isStep2ScoreExcludedの判定結果を変えるため、それらに依存する
+  // 2つのヒートマップ（業種×PL項目／業種×最終手前ノード）も作り直す必要がある。
+  // 各トグルのクリックハンドラより前で使われるため関数式で先に宣言しておく。
+  let refreshPlHeatmapFilters = function () {};
+  let refreshCauseHeatmap = function () {};
 
   function isBsLabel(label) { return plAccountOrderRank(label) === 8; }
 
@@ -3786,13 +3800,18 @@ function setStraightenOn(on) {
     let defaultFocusId = null;
     baseNodesById.forEach((node, id) => { if (defaultFocusId == null && node.label === DEFAULT_FOCUS_LABEL) defaultFocusId = id; });
     const defaultReachable = defaultFocusId ? computeReachable(defaultFocusId) : null;
-    const baselineResult = computeCellStats(defaultReachable);
+    let baselineResult = computeCellStats(defaultReachable);
 
     // 色スケールの基準は常にベースラインの最大値に固定する。ホバーのたびにスケールが
-    // 変わると色の意味が読み取りにくくなるため。
+    // 変わると色の意味が読み取りにくくなるため。迂回路非表示・手動非表示・Step2非表示の
+    // トグルを変えた時だけ、ベースライン自体を作り直してスケールも更新する。
     let maxAvg = 0;
-    baselineResult.stats.forEach(s => { maxAvg = Math.max(maxAvg, s.avg); });
-    if (maxAvg <= 0) maxAvg = 1;
+    function recomputeMaxAvg() {
+      maxAvg = 0;
+      baselineResult.stats.forEach(s => { maxAvg = Math.max(maxAvg, s.avg); });
+      if (maxAvg <= 0) maxAvg = 1;
+    }
+    recomputeMaxAvg();
 
     function colorForValue(avg) {
       const t = Math.max(0, Math.min(1, avg / maxAvg));
@@ -3902,6 +3921,11 @@ function setStraightenOn(on) {
     refreshPlHeatmapSimplify = function () {
       updatePlHeatmap(lastPlHeatmapFocusId);
     };
+    refreshPlHeatmapFilters = function () {
+      baselineResult = computeCellStats(defaultReachable);
+      recomputeMaxAvg();
+      updatePlHeatmap(lastPlHeatmapFocusId);
+    };
   })();
 
   // ---- 業種 × 最終手前ノード 影響ヒートマップ（売上／営業利益タグ切替、プラス・マイナス両方） ----
@@ -3919,7 +3943,18 @@ function setStraightenOn(on) {
     const tagRow = document.getElementById('causeHeatmapTagRow');
     if (!wrap || !tagRow) return;
 
-    const SALES_PROFIT_LABELS = new Set([
+    // 迂回路非表示・手動非表示・Step2非表示のトグルは、このヒートマップの行・列自体
+    // （どのノード・業種が「辿れる」か）を変えてしまうため、セルの塗り替えだけでは
+    // 足りず表全体を作り直す必要がある。そのためbuild()にまとめ、各トグルの
+    // クリックハンドラから呼ばれるrefreshCauseHeatmapとして公開する。選択中のタグ
+    // （売上／営業利益／その他）はbuild()の外で保持し、作り直しても引き継ぐ。
+    let activeTag = 'sales';
+
+    function build() {
+      wrap.innerHTML = '';
+      tagRow.innerHTML = '';
+
+      const SALES_PROFIT_LABELS = new Set([
       '売上高増加', '部門売上増加', '売上高減少', '部門売上減少',
       '営業利益増加', '部門営業利益増加', '営業利益減少', '部門営業利益減少',
     ]);
@@ -4212,7 +4247,6 @@ function setStraightenOn(on) {
     wrap.appendChild(caption);
     wrap.appendChild(table);
 
-    let activeTag = 'sales';
     const tagLabelEl = document.createElement('span');
     tagLabelEl.className = 'filter-label';
     tagLabelEl.textContent = 'PL項目';
@@ -4235,6 +4269,10 @@ function setStraightenOn(on) {
     });
 
     paint(activeTag);
+    }
+
+    build();
+    refreshCauseHeatmap = build;
   })();
 
   // ページを開いた時点のデフォルトとして、「ホルムズ海峡封鎖」を中心とした絞り込み表示を
