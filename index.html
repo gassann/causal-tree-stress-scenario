@@ -732,6 +732,7 @@ function computeImpactKeepSet(nodes, inAdj, outAdj) {
   const plImpactNodes = new Set();
   nodes.forEach(node => {
     if (!node.industry) return;
+    if (node.industry === '全般') return; // 特定の業種に紐づかないマクロ的なPL科目は「企業影響」の対象外
     if (node.plPositive) return;
     const touching = [...(inAdj.get(node.id) || []), ...(outAdj.get(node.id) || [])];
     if (touching.some(e => isRealCompany(e.company))) plImpactNodes.add(node.id);
