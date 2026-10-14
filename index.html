@@ -343,6 +343,79 @@
   .scenario-entry .sc-route { color: var(--ink); }
   .scenario-info .mp-note { color: var(--ink-faint); font-size: 11.5px; }
 
+  /* ---- シナリオの求め方モーダル ---- */
+  .se-overlay {
+    position: fixed; inset: 0; background: rgba(10,16,13,.55); z-index: 200;
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  .se-modal {
+    background: var(--bg); border-radius: 14px; box-shadow: var(--shadow);
+    width: min(980px, 100%); max-height: 92vh; display: flex; flex-direction: column;
+    overflow: hidden; border: 1px solid var(--line-strong);
+  }
+  .se-modal-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 18px; border-bottom: 1px solid var(--line); background: var(--surface);
+  }
+  .se-modal-title { font-weight: 700; font-size: 15px; color: var(--ink); }
+  .se-close {
+    border: none; background: transparent; color: var(--ink-muted); font-size: 20px;
+    line-height: 1; cursor: pointer; padding: 2px 6px; border-radius: 6px;
+  }
+  .se-close:hover { background: var(--surface-alt); color: var(--ink); }
+  .se-legend {
+    display: flex; flex-wrap: wrap; gap: 14px; padding: 8px 18px; font-size: 11.5px;
+    color: var(--ink-faint); background: var(--surface); border-bottom: 1px solid var(--line);
+    font-family: "JetBrains Mono", monospace;
+  }
+  .se-legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .se-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; border: 2px solid var(--line-strong); background: var(--surface); }
+  .se-dot.computing { border-color: var(--warn); background: var(--warn-soft); }
+  .se-dot.done { border-color: var(--line-strong); background: var(--surface-alt); }
+  .se-dot.final { border-color: var(--mainpath); background: var(--mainpath); }
+  .se-dot.leaf { border-color: var(--accent); background: var(--accent-soft); }
+  .se-modal-body {
+    display: grid; grid-template-columns: 1fr 300px; gap: 0; overflow: auto; flex: 1 1 auto;
+  }
+  @media (max-width: 760px) { .se-modal-body { grid-template-columns: 1fr; } }
+  .se-graph-wrap { padding: 14px; overflow: auto; background: var(--surface-alt); }
+  .se-graph-wrap svg { width: 100%; height: auto; display: block; }
+  .se-side { padding: 16px 18px; border-left: 1px solid var(--line); background: var(--surface); overflow: auto; }
+  @media (max-width: 760px) { .se-side { border-left: none; border-top: 1px solid var(--line); } }
+  .se-step-title {
+    font-family: "JetBrains Mono", monospace; font-size: 11.5px; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--accent); font-weight: 700; margin-bottom: 8px;
+  }
+  .se-step-body { font-size: 13.5px; line-height: 1.75; color: var(--ink); }
+  .se-step-body b { color: var(--accent-ink); }
+  .se-formula {
+    margin-top: 10px; font-family: "JetBrains Mono", monospace; font-size: 12px;
+    background: var(--surface-alt); border-radius: 8px; padding: 10px 12px; line-height: 1.7;
+    white-space: pre-wrap; color: var(--ink); border: 1px solid var(--line);
+  }
+  .se-modal-controls {
+    display: flex; align-items: center; gap: 8px; padding: 12px 18px;
+    border-top: 1px solid var(--line); background: var(--surface);
+  }
+  .se-dots { display: flex; gap: 5px; margin-left: auto; flex-wrap: wrap; max-width: 260px; }
+  .se-step-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--line-strong); flex: none; }
+  .se-step-dot.on { background: var(--accent); }
+  .se-node-box { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1.4; transition: stroke .2s ease, fill .2s ease; }
+  .se-node-box.se-pending { fill: var(--surface-alt); stroke: var(--line); }
+  .se-node-box.se-computing { fill: var(--warn-soft); stroke: var(--warn); stroke-width: 2.2; }
+  .se-node-box.se-final { stroke-width: 2.4; }
+  .se-node-box.se-leaf { fill: var(--accent-soft); stroke: var(--accent); }
+  .se-node-label { font-size: 12.5px; font-weight: 700; fill: var(--ink); font-family: "Zen Kaku Gothic New", sans-serif; }
+  .se-node-label.se-pending { fill: var(--ink-faint); }
+  .se-node-value { font-family: "JetBrains Mono", monospace; font-size: 11px; font-weight: 700; fill: var(--accent-ink); }
+  .se-edge { stroke: var(--line-strong); stroke-width: 2; fill: none; marker-end: url(#se-arrow-dim); transition: stroke .2s ease, stroke-width .2s ease; }
+  .se-edge.se-computing { stroke: var(--warn); stroke-width: 2.6; marker-end: url(#se-arrow-warn); }
+  .se-edge.se-final { stroke-width: 3.4; marker-end: url(#se-arrow-final); }
+  .se-scenario-banner {
+    margin-top: 10px; font-size: 12.5px; background: var(--accent-soft); color: var(--accent-ink);
+    border-left: 3px solid var(--accent); border-radius: 6px; padding: 8px 12px; line-height: 1.7;
+  }
+
   .view-tabs { display: flex; gap: 8px; margin-bottom: 10px; }
   .risk-matrix-wrap { margin-top: 4px; }
   .risk-matrix-title { font-size: 12px; font-weight: 700; color: var(--ink-muted); margin-bottom: 8px; }
@@ -641,7 +714,7 @@
     </div>
   </header>
 
-  <div class="scenario-info" id="scenarioInfo"><div class="mp-box"><div id="scenarioList"></div><div class="mp-note">影響度×蓋然性が付与済みのノードのみを対象に算出（試験版・現在は一部ノードのみ）。スコア＝経路上の各ノードの（影響度×蓋然性）合計÷ノード数。上位シナリオとノードの重複が指定割合を超える経路は除外して次点を採用。</div></div></div>
+  <div class="scenario-info" id="scenarioInfo"><div class="mp-box"><div id="scenarioList"></div><div class="mp-note">影響度×蓋然性が付与済みのノードのみを対象に算出（試験版・現在は一部ノードのみ）。スコア＝経路上の各ノードの（影響度×蓋然性）合計÷ノード数。上位シナリオとノードの重複が指定割合を超える経路は除外して次点を採用。</div><button type="button" id="scenarioExplainerBtn" class="chip" style="align-self:flex-start;">シナリオの求め方を見る ▶</button></div></div>
 
   <section id="isolationPanel" class="isolation-panel" style="display:none;">
     <div class="isolation-panel-head">
@@ -691,6 +764,37 @@
 <div id="tooltip"></div>
 <div id="nodeContextMenu" class="node-context-menu">
   <div class="node-context-menu-item" data-action="isolate">このノードを起点にしたツリーを表示</div>
+</div>
+
+<div id="seOverlay" class="se-overlay" style="display:none;">
+  <div class="se-modal">
+    <div class="se-modal-head">
+      <div class="se-modal-title">シナリオの求め方（実データで再現）</div>
+      <button type="button" id="seCloseBtn" class="se-close" aria-label="閉じる">×</button>
+    </div>
+    <div class="se-legend">
+      <span><i class="se-dot pending"></i>未計算</span>
+      <span><i class="se-dot computing"></i>計算中</span>
+      <span><i class="se-dot done"></i>計算済み</span>
+      <span><i class="se-dot final"></i>採用された経路</span>
+      <span><i class="se-dot leaf"></i>PL終端</span>
+    </div>
+    <div class="se-modal-body">
+      <div class="se-graph-wrap"><svg id="seSvg" viewBox="0 0 640 400"></svg></div>
+      <div class="se-side">
+        <div class="se-step-title" id="seStepTitle"></div>
+        <div class="se-step-body" id="seStepBody"></div>
+        <pre class="se-formula" id="seFormula" style="display:none;"></pre>
+      </div>
+    </div>
+    <div class="se-modal-controls">
+      <button type="button" class="chip" id="sePrevBtn">← 戻る</button>
+      <button type="button" class="chip active" id="seNextBtn">次へ →</button>
+      <div class="se-dots" id="seDots"></div>
+      <button type="button" class="chip reset" id="seResetBtn">最初から</button>
+      <button type="button" class="chip" id="seAutoBtn">自動再生</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -1780,6 +1884,66 @@ function setStraightenOn(on) {
       excludedNodes.add(bottomNodeId);
     }
     return results;
+  }
+
+  // computeExcludeBestのplGroups（直接PL合計の業種別内訳）と全く同じ集計ロジックを、
+  // 「シナリオの求め方」モーダルの表示用に、任意のexcludedNodesの状態で再現する。
+  // describeNodePlBreakdownは常に除外なし（シナリオ1）の状態しか見られないため、
+  // シナリオ2・3（除外後）の内訳表示にはこちらを使う。
+  function industryBreakdownExcluding(id, excludedNodes) {
+    if (excludedNodes.has(id)) return [];
+    const byIndustry = new Map();
+    (scoreBaseOutAdj.get(id) || []).forEach(e => {
+      const t = scoreBaseNodesById.get(e.target);
+      if (!t.industry || !e.change_pct || t.plPositive) return;
+      if (!SALES_PL_LABELS.has(t.label)) return;
+      if (isRedundantEdge(id, e.target)) return;
+      if (isManuallyHiddenNode(t)) return;
+      if (isStep2ScoreExcluded(e.target)) return;
+      const v = parseFloat(e.change_pct);
+      if (!isFinite(v)) return;
+      if (!byIndustry.has(t.industry)) byIndustry.set(t.industry, []);
+      byIndustry.get(t.industry).push(Math.abs(v));
+    });
+    const rows = [];
+    byIndustry.forEach((vals, industry) => rows.push({ industry, mean: trimmedMean(vals), n: vals.length }));
+    rows.sort((a, b) => b.mean - a.mean);
+    return rows;
+  }
+
+  // 「シナリオの求め方」モーダル用に、computeExcludeScenariosと全く同じ手順を踏みながら、
+  // 各段のノードのentry（raw/plSum/choice/childCandidates）とPL業種別内訳をあわせて記録する。
+  // 実データ・実ロジックをそのまま使うため、表示内容は常にツリー本体のスコアと一致する。
+  function computeScenarioWalkthrough(rootId, count) {
+    const excludedNodes = new Set();
+    const rootNode = scoreNodesById.get(rootId);
+    const rootProb = rootNode.probability != null ? probabilityWeight(rootNode.probability) : 1;
+    const scenarios = [];
+    for (let k = 0; k < count; k++) {
+      const memo = new Map();
+      computeExcludeBest(rootId, memo, excludedNodes);
+      const excludedBefore = new Set(excludedNodes);
+      const path = [rootId];
+      let cur = rootId, terminalEdge = null, bottomNodeId = null, guard = 0;
+      while (guard++ < 200) {
+        const entry = memo.get(cur);
+        if (!entry || entry.choice.type === 'none') break;
+        if (entry.choice.type === 'pl') { terminalEdge = entry.choice.edge; bottomNodeId = cur; break; }
+        cur = entry.choice.id; path.push(cur);
+      }
+      const rootEntry = memo.get(rootId);
+      const score = rootEntry ? rootProb * rootEntry.raw : 0;
+      if (!rootEntry || score <= 0 || terminalEdge == null) break;
+      const levels = path.map(id => ({
+        id,
+        label: scoreNodesById.get(id).label,
+        entry: memo.get(id),
+        industryBreakdown: industryBreakdownExcluding(id, excludedBefore),
+      }));
+      scenarios.push({ levels, path, score, terminalEdge, bottomNodeId, excludedBefore });
+      excludedNodes.add(bottomNodeId);
+    }
+    return { scenarios, rootProb };
   }
 
   // ノード単体の「PL合計×蓋然性」スコアを表示用にキャッシュする（除外なしの基準値）。
@@ -4316,6 +4480,279 @@ function setStraightenOn(on) {
 
     build();
     refreshCauseHeatmap = build;
+  })();
+
+  // ---- 「シナリオの求め方」モーダル：実データ・実ロジックでステップ解説 ----
+  // computeScenarioWalkthrough()が返す本物のraw/plSum/childCandidatesを使い、末端PLから
+  // 根へ向かう実際の計算順（ボトムアップ）で1段ずつ再生する。モックの数値は一切使わない。
+  (function initScenarioExplainer() {
+    const btn = document.getElementById('scenarioExplainerBtn');
+    const overlay = document.getElementById('seOverlay');
+    if (!btn || !overlay) return;
+    const svg = document.getElementById('seSvg');
+    const closeBtn = document.getElementById('seCloseBtn');
+    const prevBtn = document.getElementById('sePrevBtn');
+    const nextBtn = document.getElementById('seNextBtn');
+    const resetBtn = document.getElementById('seResetBtn');
+    const autoBtn = document.getElementById('seAutoBtn');
+    const dotsEl = document.getElementById('seDots');
+    const stepTitleEl = document.getElementById('seStepTitle');
+    const stepBodyEl = document.getElementById('seStepBody');
+    const formulaEl = document.getElementById('seFormula');
+    const controlsEl = document.querySelector('.se-modal-controls');
+
+    const svgNS = 'http://www.w3.org/2000/svg';
+    function svgEl(tag, attrs, parent) {
+      const e = document.createElementNS(svgNS, tag);
+      for (const k in attrs) e.setAttribute(k, attrs[k]);
+      if (parent) parent.appendChild(e);
+      return e;
+    }
+    function fmt(v) { return (Math.round(v * 100) / 100).toFixed(2); }
+
+    let walkCache = null;
+    let steps = [];
+    let stepIdx = 0;
+    let autoTimer = null;
+    let builtScenarioKey = null;
+    let nodeBoxEls = [];
+    let edgeEls = [];
+
+    const NODE_W = 420, NODE_H = 46, GAP = 30, PAD = 20;
+
+    function buildSteps(walk, rootLabel) {
+      const out = [];
+      out.push({
+        kind: 'intro', scenarioIdx: 0,
+        title: 'STEP 0 — 考え方',
+        body: `起点ノード「<b>${escapeHtml(rootLabel)}</b>」を例に、実際のツリーの実データ・実ロジックで解説します。各ノードのスコア（<b>raw</b>）は「自分から直接PLにつながる増減率の合計（業種別にプールしたトリム平均の総和）」と「子ノードの中で<b>重み×子のrawが最大の1つ</b>」を足したものです。末端（PLに一番近いノード）から根に向かって、実際のツリーの計算順そのままに1段ずつ求めていきます。`,
+        formula: null,
+      });
+      walk.scenarios.forEach((sc, k) => {
+        if (k > 0) {
+          const prevBottomLabel = walk.scenarios[k - 1].levels[walk.scenarios[k - 1].levels.length - 1].label;
+          out.push({
+            kind: 'exclude', scenarioIdx: k,
+            title: `STEP — 第${k + 1}シナリオ：前の結末を除外`,
+            body: `同じ起点ノードのまま、前の結末ノード「<b>${escapeHtml(prevBottomLabel)}</b>」を候補から除外し、それ以外で一番スコアが大きい経路をもう一度探します（※この起点だけで次点を探した場合の例で、画面上部の「シナリオ一覧」とは対応していません。あちらは複数の起点ノードからグローバルに上位を集めています）。`,
+            formula: null,
+          });
+        }
+        const L = sc.levels.length;
+        for (let j = L - 1; j >= 0; j--) {
+          const lv = sc.levels[j];
+          const entry = lv.entry;
+          const plLines = lv.industryBreakdown.length
+            ? lv.industryBreakdown.map(r => `${r.industry}/売上 ${r.mean.toFixed(1)}%（${r.n}件）`).join('\n')
+            : '（直接PLに繋がる増減率データなし）';
+          const nonZero = (entry.childCandidates || []).filter(c => c.weightedVal > 1e-9);
+          let childLine = '（対象となる子ノードなし）';
+          if (nonZero.length) {
+            childLine = nonZero.slice(0, 6).map((c, i) => {
+              const cn = scoreNodesById.get(c.id);
+              const mark = (entry.choice.type === 'child' && i === 0) ? '◎採用' : '　比較';
+              return `${mark}「${cn.label}」: ${fmt(c.raw)} × 重み${c.weight.toFixed(2)} = ${fmt(c.weightedVal)}`;
+            }).join('\n') + (nonZero.length > 6 ? `\n　他${nonZero.length - 6}件` : '');
+          }
+          const childVal = entry.raw - entry.plSum;
+          const pickedSide = entry.choice.type === 'pl' ? 'PL直接' : (entry.choice.type === 'child' ? '子ノード経由' : 'なし');
+          out.push({
+            kind: 'level', scenarioIdx: k, levelIdx: j,
+            title: `STEP — ${escapeHtml(lv.label)}`,
+            body: `<b>${escapeHtml(lv.label)}</b> のスコア（raw）を求めます。直接PL合計 ${fmt(entry.plSum)} ＋ 子ノード経由（最大値） ${fmt(childVal)} ＝ raw <b>${fmt(entry.raw)}</b>。経路の先は${pickedSide}側を採用。`,
+            formula: `直接PL合計: ${fmt(entry.plSum)}\n${plLines}\n\n子ノード経由（最大値を採用）: ${fmt(childVal)}\n${childLine}\n\nraw = ${fmt(entry.plSum)} + ${fmt(childVal)} = ${fmt(entry.raw)}`,
+          });
+        }
+        const rootRaw = sc.levels[0].entry.raw;
+        const scoreText = fmt(sc.score);
+        const leafNode = scoreNodesById.get(sc.terminalEdge.target);
+        const pathLabels = sc.levels.map(lv => lv.label).concat([leafNode ? leafNode.label : sc.terminalEdge.target]);
+        out.push({
+          kind: 'final', scenarioIdx: k,
+          title: `STEP — 第${k + 1}シナリオ確定`,
+          body: `根「${escapeHtml(rootLabel)}」の raw は ${fmt(rootRaw)}。根には入ってくるエッジが無いため、根自身の蓋然性による重み ${walk.rootProb.toFixed(2)} を最後に1回だけ掛けます。スコア = ${walk.rootProb.toFixed(2)} × ${fmt(rootRaw)} = <b>${scoreText}</b>。`,
+          formula: `経路：${pathLabels.join(' → ')}\n\nスコア = 根の蓋然性の重み ${walk.rootProb.toFixed(2)} × raw(根) ${fmt(rootRaw)} = ${scoreText}`,
+        });
+      });
+      return out;
+    }
+
+    function buildSvgForScenario(sc) {
+      svg.innerHTML = '';
+      const defs = svgEl('defs', {}, svg);
+      [['se-arrow-dim', 'var(--line-strong)'], ['se-arrow-warn', 'var(--warn)'], ['se-arrow-final', 'var(--mainpath)']].forEach(([id, color]) => {
+        const marker = svgEl('marker', { id, viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }, defs);
+        svgEl('path', { d: 'M0,0 L10,5 L0,10 Z', fill: color }, marker);
+      });
+      const L = sc.levels.length;
+      const totalBoxes = L + 1;
+      const centerX = NODE_W / 2 + PAD;
+      const h = PAD * 2 + totalBoxes * NODE_H + (totalBoxes - 1) * GAP;
+      svg.setAttribute('viewBox', `0 0 ${NODE_W + PAD * 2} ${h}`);
+      const yFor = i => PAD + i * (NODE_H + GAP);
+      nodeBoxEls = [];
+      edgeEls = [];
+      for (let i = 0; i < L; i++) {
+        const y1 = yFor(i) + NODE_H, y2 = yFor(i + 1);
+        const path = svgEl('path', { d: `M ${centerX} ${y1} L ${centerX} ${y2}`, class: 'se-edge' }, svg);
+        edgeEls.push(path);
+      }
+      for (let i = 0; i <= L; i++) {
+        const y = yFor(i);
+        const isLeaf = i === L;
+        const g = svgEl('g', {}, svg);
+        const rect = svgEl('rect', { x: PAD, y, width: NODE_W, height: NODE_H, rx: 10, class: 'se-node-box se-pending' }, g);
+        const rawLabel = isLeaf
+          ? (() => { const n = scoreNodesById.get(sc.terminalEdge.target); return n ? n.label : sc.terminalEdge.target; })()
+          : sc.levels[i].label;
+        const label = rawLabel.length > 30 ? rawLabel.slice(0, 29) + '…' : rawLabel;
+        const text = svgEl('text', { x: centerX, y: y + (isLeaf ? NODE_H / 2 + 4 : NODE_H / 2 - 4), 'text-anchor': 'middle', class: 'se-node-label se-pending' }, g);
+        text.textContent = label;
+        let valueText = null;
+        if (!isLeaf) {
+          valueText = svgEl('text', { x: centerX, y: y + NODE_H / 2 + 13, 'text-anchor': 'middle', class: 'se-node-value', style: 'display:none;' }, g);
+        }
+        if (isLeaf) rect.setAttribute('class', 'se-node-box se-leaf');
+        nodeBoxEls.push({ rect, text, valueText, isLeaf, levelIdx: isLeaf ? null : i });
+      }
+    }
+
+    function render() {
+      if (!steps.length) return;
+      const step = steps[stepIdx];
+      const sc = walkCache.scenarios[step.scenarioIdx];
+      if (builtScenarioKey !== step.scenarioIdx) {
+        buildSvgForScenario(sc);
+        builtScenarioKey = step.scenarioIdx;
+      }
+      const L = sc.levels.length;
+      const finalMode = step.kind === 'final';
+      const doneSet = new Set();
+      let computingIdx = null;
+      if (step.kind === 'level') {
+        computingIdx = step.levelIdx;
+        for (let j = step.levelIdx + 1; j < L; j++) doneSet.add(j);
+      } else if (finalMode) {
+        for (let j = 0; j < L; j++) doneSet.add(j);
+      }
+      const revealed = new Set(doneSet);
+      if (computingIdx != null) revealed.add(computingIdx);
+
+      const scenarioColor = SCENARIO_PALETTE[step.scenarioIdx % SCENARIO_PALETTE.length];
+      nodeBoxEls.forEach(nb => {
+        if (nb.isLeaf) {
+          nb.rect.setAttribute('class', 'se-node-box se-leaf' + (finalMode ? ' se-final' : ''));
+          nb.rect.style.stroke = finalMode ? scenarioColor : '';
+          return;
+        }
+        const i = nb.levelIdx;
+        let cls = 'se-node-box se-pending';
+        if (i === computingIdx) cls = 'se-node-box se-computing';
+        else if (doneSet.has(i)) cls = 'se-node-box';
+        if (finalMode) cls = 'se-node-box se-final';
+        nb.rect.setAttribute('class', cls);
+        nb.rect.style.stroke = finalMode ? scenarioColor : '';
+        nb.text.setAttribute('class', 'se-node-label' + (revealed.has(i) || finalMode ? '' : ' se-pending'));
+        const showVal = finalMode || revealed.has(i);
+        nb.valueText.style.display = showVal ? '' : 'none';
+        if (showVal) nb.valueText.textContent = 'raw ' + fmt(sc.levels[i].entry.raw);
+      });
+      edgeEls.forEach((edgePath, i) => {
+        let cls = 'se-edge';
+        if (finalMode) cls += ' se-final';
+        else if (i === computingIdx) cls += ' se-computing';
+        edgePath.setAttribute('class', cls);
+        edgePath.style.stroke = finalMode ? scenarioColor : '';
+        edgePath.style.opacity = (finalMode || revealed.has(i)) ? '1' : '.2';
+      });
+
+      stepTitleEl.textContent = step.title;
+      stepBodyEl.innerHTML = step.body;
+      if (step.formula) { formulaEl.style.display = ''; formulaEl.textContent = step.formula; }
+      else { formulaEl.style.display = 'none'; }
+
+      prevBtn.disabled = stepIdx === 0;
+      nextBtn.disabled = stepIdx === steps.length - 1;
+      dotsEl.innerHTML = '';
+      steps.forEach((_, i) => {
+        const d = document.createElement('span');
+        d.className = 'se-step-dot' + (i === stepIdx ? ' on' : '');
+        dotsEl.appendChild(d);
+      });
+    }
+
+    function stopAuto() {
+      if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+      autoBtn.textContent = '自動再生';
+    }
+
+    function showMessage(msg) {
+      svg.innerHTML = '';
+      svg.removeAttribute('viewBox');
+      stepTitleEl.textContent = '';
+      stepBodyEl.textContent = msg;
+      formulaEl.style.display = 'none';
+      dotsEl.innerHTML = '';
+      if (controlsEl) controlsEl.style.display = 'none';
+      overlay.style.display = 'flex';
+    }
+
+    function open() {
+      if (controlsEl) controlsEl.style.display = '';
+      if (scoreMode !== 'exclude') {
+        showMessage('「シナリオの求め方」は「PL合計×蓋然性（除外して再計算）」モードの時だけ確認できます。上部のモード切り替えチップで切り替えてから開いてください。');
+        return;
+      }
+      // 「シナリオ一覧」はscoredRoots()全体からグローバルに上位を集めるため、シナリオ1・2・3が
+      // それぞれ別の起点ノードから来ることがある（除外して再計算する流れを1本の起点で順に
+      // 見せる、というこのモーダルの目的とは合わない）。そのため既定では、このツリーで最も
+      // 例として参照されている「ホルムズ海峡封鎖」を起点に固定し、無ければ現在表示中の
+      // シナリオ1の起点、それも無ければscoredRoots()の先頭にフォールバックする。
+      const DEFAULT_EXPLAINER_ROOT_LABEL = 'ホルムズ海峡封鎖';
+      let rootId = null;
+      scoreNodesById.forEach((node, id) => { if (rootId == null && node.label === DEFAULT_EXPLAINER_ROOT_LABEL && scoredIds.has(id)) rootId = id; });
+      if (!rootId) rootId = (currentScenarios.length ? currentScenarios[0].path[0] : null);
+      if (!rootId) {
+        const roots = scoredRoots();
+        rootId = roots.length ? roots[0] : null;
+      }
+      if (!rootId) {
+        showMessage('影響度・蓋然性が付与されたノードが見つからないため、シナリオを計算できません。');
+        return;
+      }
+      const walk = computeScenarioWalkthrough(rootId, 3);
+      if (!walk.scenarios.length) {
+        showMessage('この起点ノードから算出できるシナリオが見つかりませんでした。');
+        return;
+      }
+      walkCache = walk;
+      const rootLabel = scoreNodesById.get(rootId).label;
+      steps = buildSteps(walk, rootLabel);
+      stepIdx = 0;
+      builtScenarioKey = null;
+      overlay.style.display = 'flex';
+      render();
+    }
+    function close() {
+      overlay.style.display = 'none';
+      stopAuto();
+    }
+
+    btn.addEventListener('click', open);
+    closeBtn.addEventListener('click', close);
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && overlay.style.display !== 'none') close(); });
+    prevBtn.addEventListener('click', () => { if (stepIdx > 0) { stepIdx--; render(); } });
+    nextBtn.addEventListener('click', () => { if (stepIdx < steps.length - 1) { stepIdx++; render(); } });
+    resetBtn.addEventListener('click', () => { stepIdx = 0; builtScenarioKey = null; stopAuto(); render(); });
+    autoBtn.addEventListener('click', () => {
+      if (autoTimer) { stopAuto(); return; }
+      autoBtn.textContent = '停止';
+      autoTimer = setInterval(() => {
+        if (stepIdx >= steps.length - 1) { stopAuto(); return; }
+        stepIdx++; render();
+      }, 2200);
+    });
   })();
 
   // ページを開いた時点のデフォルトとして、「ホルムズ海峡封鎖」を中心とした絞り込み表示を
