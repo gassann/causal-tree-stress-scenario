@@ -1603,6 +1603,7 @@ function setStraightenOn(on) {
       chip.classList.add('active');
       const view = chip.dataset.view;
       document.getElementById('isolationSvgWrap').style.display = view === 'tree' ? '' : 'none';
+      document.getElementById('isolationZoomBar').style.display = view === 'tree' ? '' : 'none';
       document.getElementById('isolationMatrixWrap').style.display = view === 'matrix' ? '' : 'none';
       document.getElementById('isolationEdgeProbWrap').style.display = view === 'edgeprob' ? '' : 'none';
     });
@@ -3821,6 +3822,7 @@ function setStraightenOn(on) {
       ? `「${nodesById.get(focusId).label}」を起点とした下流の因果連鎖（${isoNodeIds.length}ノード / ${isoEdges.length}リンク）`
       : `「${nodesById.get(focusId).label}」を中心とした因果連鎖（${isoNodeIds.length}ノード / ${isoEdges.length}リンク）`;
     document.getElementById('isolationPanel').style.display = '';
+    attachZoomControls(document.getElementById('isolationZoomBar'), wrap, svg, { fitToContainer: true });
     document.querySelector('main').style.display = 'none';
     highlightScenariosIn(wrap, scenariosShown ? currentScenarios : null);
     const isoMatrixWrap = document.getElementById('isolationMatrixWrap');
@@ -3834,6 +3836,7 @@ function setStraightenOn(on) {
     // default back to the tree view each time a new node is focused
     isoTabs.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c.dataset.view === 'tree'));
     wrap.style.display = '';
+    document.getElementById('isolationZoomBar').style.display = '';
     isoMatrixWrap.style.display = 'none';
     isoEdgeProbWrap.style.display = 'none';
   }
