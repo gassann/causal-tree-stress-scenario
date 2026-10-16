@@ -249,6 +249,8 @@
     font-family: "JetBrains Mono", monospace; font-size: 11.5px; color: var(--ink-faint);
     min-width: 42px; text-align: center;
   }
+  .zoom-scroll-box { overflow: auto; cursor: grab; }
+  .zoom-scroll-box.zoom-grabbing { cursor: grabbing; user-select: none; }
 
   .tree-gallery {
     display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start;
@@ -3684,8 +3686,46 @@ function setStraightenOn(on) {
   // ラップ要素のoverflow-x/ページの縦スクロールで見たい部分までパン出来るようにする。
   // CSSのtransform:scaleはレイアウトサイズが変わらずスクロール領域が追従しないため使わない。
   const ZOOM_MIN = 0.3, ZOOM_MAX = 4, ZOOM_STEP = 0.2;
+  // wrapElをドラッグでパン（スクロール位置を移動）できるようにする。ドラッグが実際に
+  // 発生した場合のみ、直後の1回のクリックをcaptureフェーズで止めてノードクリック
+  // （ジャンプ等）が誤発火しないようにする。同じwrapElに複数回バインドしないよう
+  // dataset.panEnabledでガードする（isolationSvgWrapはノード切替のたびに
+  // attachZoomControlsが呼ばれ、wrapEl自体は使い回されるため）。
+  function enablePanDrag(wrapEl, maxHeight) {
+    wrapEl.classList.add('zoom-scroll-box');
+    wrapEl.style.maxHeight = maxHeight;
+    if (wrapEl.dataset.panEnabled) return;
+    wrapEl.dataset.panEnabled = '1';
+    let dragging = false, moved = false, startX = 0, startY = 0, startLeft = 0, startTop = 0;
+    wrapEl.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      dragging = true; moved = false;
+      startX = e.clientX; startY = e.clientY;
+      startLeft = wrapEl.scrollLeft; startTop = wrapEl.scrollTop;
+      wrapEl.classList.add('zoom-grabbing');
+      e.preventDefault();
+    });
+    window.addEventListener('mousemove', (e) => {
+      if (!dragging) return;
+      const dx = e.clientX - startX, dy = e.clientY - startY;
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) moved = true;
+      wrapEl.scrollLeft = startLeft - dx;
+      wrapEl.scrollTop = startTop - dy;
+    });
+    window.addEventListener('mouseup', () => {
+      if (!dragging) return;
+      dragging = false;
+      wrapEl.classList.remove('zoom-grabbing');
+      if (moved) {
+        const suppressClick = (ev) => { ev.stopPropagation(); };
+        wrapEl.addEventListener('click', suppressClick, { capture: true, once: true });
+      }
+    });
+  }
+
   function attachZoomControls(barEl, wrapEl, svg, opts) {
     const fitToContainer = !!(opts && opts.fitToContainer);
+    enablePanDrag(wrapEl, (opts && opts.maxHeight) || '70vh');
     const vb = svg.viewBox && svg.viewBox.baseVal && svg.viewBox.baseVal.width
       ? svg.viewBox.baseVal
       : { width: parseFloat(svg.getAttribute('width')) || 1, height: parseFloat(svg.getAttribute('height')) || 1 };
