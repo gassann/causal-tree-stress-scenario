@@ -2160,9 +2160,8 @@ function setStraightenOn(on) {
       // 有効な間はnodesByIdに存在しない（ツリーからは消えている）ため、その場合は
       // PLノードを含む完全なデータ（baseNodesById）から表示用ラベルを補う。
       const route = sc.path.map(id => escapeHtml((nodesById.get(id) || baseNodesById.get(id)).label)).join(' → ');
-      const scoreLabel = scoreMode === 'exclude' ? `スコア ${sc.avg.toFixed(2)}` : `スコア ${sc.avg.toFixed(2)} / 最大${scoreMode === 'zone' ? 4 : 16}`;
       return `<div class="scenario-entry"><span class="sc-swatch" style="background:${color}"></span>` +
-        `<span class="sc-title">シナリオ${i + 1}（${scoreLabel}）</span>` +
+        `<span class="sc-title">シナリオ${i + 1}</span>` +
         `<span class="sc-route">${route}</span></div>`;
     }).join('');
     info.classList.add('show');
