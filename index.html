@@ -4344,7 +4344,10 @@ function setStraightenOn(on) {
     // ホルムズ海峡から辿れる範囲に絞った上で、タグ対象のPL項目へ直接つながるエッジを
     // 集計する。上の「業種×PL項目」ヒートマップ（computeCellStats内のisRedundantEdge等）
     // と同じフィルタを適用し、ツリー本体の表示ルールと矛盾しないようにする。
-    function computeCellStats(tagKey) {
+    // ignoreEstimateMode=true のときは実データ/逆算の切替フィルタを適用せず、両方式の
+    // エッジを合算する。列の「存在」と「並び順」を推計方式切替に依存させないための
+    // 専用集計で、paint()で表示するセルの中身（statsByTag）には使わない。
+    function computeCellStats(tagKey, ignoreEstimateMode) {
       const signByLabel = TAG_DEFS[tagKey].signByLabel;
       const groups = new Map(); // "industry|sourceId" -> [signed %, ...]
       const companies = new Map(); // "industry|sourceId" -> Set(会社名)（色の濃さはこちらの件数を使う）
@@ -4359,7 +4362,7 @@ function setStraightenOn(on) {
         const sign = signByLabel[t.label];
         if (sign == null) return;
         if (sign > 0) return; // ノードの影響度・スコア（PL合計×蓋然性）と揃えるため、プラス方向（増収・増益等）は対象外
-        if (!estimateMethodAllowed(e)) return; // 実データ/逆算の切替で選ばれていない方式のエッジは対象外
+        if (!ignoreEstimateMode && !estimateMethodAllowed(e)) return; // 実データ/逆算の切替で選ばれていない方式のエッジは対象外
         if (isRedundantEdge(e.source, e.target)) return; // 迂回路により非表示になっている直接エッジは無いものとして扱う
         if (isManuallyHiddenNode(t)) return; // 手動で非表示にしたノードは除外後のツリーとして扱う
         if (isStep2ScoreExcluded(e.target)) return; // Step2ノードを非表示にしている場合は除外後のツリーとして扱う
@@ -4396,13 +4399,18 @@ function setStraightenOn(on) {
 
     const statsByTag = {};
     Object.keys(TAG_DEFS).forEach(key => { statsByTag[key] = computeCellStats(key); });
+    // 列の存在・並び順を決める専用集計（実データ/逆算の切替フィルタを無視し、両方式を
+    // 合算する）。セルの表示内容（statsByTag）とは別に持ち、推計方式を切り替えても
+    // 列の本数・並びが変わらないようにする。
+    const orderStatsByTag = {};
+    Object.keys(TAG_DEFS).forEach(key => { orderStatsByTag[key] = computeCellStats(key, true); });
 
-    // 行・列は両タグの集合の和集合で固定する。こうしないと、タグを切り替えるたびに
-    // 列の並び・本数が変わってしまい比較しづらいため。
+    // 行・列は3タグ×両推計方式の集合の和集合で固定する。こうしないと、タグや推計方式を
+    // 切り替えるたびに列の並び・本数が変わってしまい比較しづらいため。
     const industriesSet = new Set();
     const sourcesMap = new Map(); // sourceId -> label
-    Object.keys(statsByTag).forEach(tagKey => {
-      statsByTag[tagKey].reached.forEach(key => {
+    Object.keys(orderStatsByTag).forEach(tagKey => {
+      orderStatsByTag[tagKey].reached.forEach(key => {
         const sep = key.indexOf('|');
         const industry = key.slice(0, sep);
         const sourceId = key.slice(sep + 1);
@@ -4418,8 +4426,8 @@ function setStraightenOn(on) {
     //自体は判定できるため、数値の有無に関わらずsourceSignを見て判定する。
     const sourceHasPositive = new Map();
     const sourceHasNegative = new Map();
-    Object.keys(statsByTag).forEach(tagKey => {
-      statsByTag[tagKey].sourceSign.forEach((ss, sid) => {
+    Object.keys(orderStatsByTag).forEach(tagKey => {
+      orderStatsByTag[tagKey].sourceSign.forEach((ss, sid) => {
         if (ss.pos) sourceHasPositive.set(sid, true);
         if (ss.neg) sourceHasNegative.set(sid, true);
       });
@@ -4430,7 +4438,7 @@ function setStraightenOn(on) {
     // 列が無くなった業種（行）は表示しない。
     Array.from(industriesSet).forEach(ind => {
       const hasColumn = Array.from(sourcesMap.keys()).some(sid =>
-        Object.keys(statsByTag).some(tagKey => statsByTag[tagKey].reached.has(ind + '|' + sid))
+        Object.keys(orderStatsByTag).some(tagKey => orderStatsByTag[tagKey].reached.has(ind + '|' + sid))
       );
       if (!hasColumn) industriesSet.delete(ind);
     });
@@ -4442,15 +4450,15 @@ function setStraightenOn(on) {
     const industries = Array.from(industriesSet).sort((a, b) => a.localeCompare(b, 'ja'));
     const industryColor = new Map(industries.map((ind, i) => [ind, NODE_INDUSTRY_PALETTE[i % NODE_INDUSTRY_PALETTE.length]]));
 
-    // 列の並びは、両タグを合わせた影響の大きさ（業種をまたいだ絶対値合計）が大きい順。
-    // タグを切り替えても同じ並びのままにする。
+    // 列の並びは、両タグ×両推計方式を合わせた影響の大きさ（業種をまたいだ絶対値合計）が
+    // 大きい順。タグ・推計方式のどちらを切り替えても同じ並びのままにする。
     const sourceIds = Array.from(sourcesMap.keys());
     const sourceWeight = new Map();
     sourceIds.forEach(sid => {
       let total = 0;
-      Object.keys(statsByTag).forEach(tagKey => {
+      Object.keys(orderStatsByTag).forEach(tagKey => {
         industries.forEach(ind => {
-          const s = statsByTag[tagKey].stats.get(ind + '|' + sid);
+          const s = orderStatsByTag[tagKey].stats.get(ind + '|' + sid);
           if (s) total += Math.abs(s.avg);
         });
       });
