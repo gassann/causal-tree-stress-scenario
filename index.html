@@ -702,6 +702,21 @@
     display: block; font-size: 7.5px; line-height: 1; font-weight: 700;
     color: var(--warn, #c77d1a); letter-spacing: -0.2px;
   }
+  .formula-note {
+    margin-top: 14px; padding: 12px 16px; max-width: 72ch;
+    border: 1px solid var(--line-strong); border-radius: 8px;
+    background: var(--surface-alt); font-size: 12px; color: var(--ink-muted);
+  }
+  .formula-note h3 {
+    margin: 0 0 8px; font-size: 12px; font-weight: 700; color: var(--ink);
+  }
+  .formula-note .formula-block { margin: 0 0 10px; }
+  .formula-note .formula-block:last-child { margin-bottom: 0; }
+  .formula-note .formula-label { font-weight: 600; color: var(--ink); margin: 0 0 3px; }
+  .formula-note code {
+    display: block; font-family: "JetBrains Mono", monospace; font-size: 11.5px;
+    color: var(--ink-muted); white-space: pre-wrap; line-height: 1.6;
+  }
 
 </style>
 </head>
@@ -784,6 +799,30 @@
     <p class="desc">「売上」「営業利益」「その他」タグで対象のPL項目（売上高増加/減少・部門売上増加/減少、営業利益増加/減少・部門営業利益増加/減少、または売上原価・売上総利益・経常利益・当期純利益・部門／地域利益など売上・営業利益以外の一般的なPL項目）を切り替え、そのPL項目に直接つながるエッジの「原因ノード（PL項目の手前のノード）」を列、業種を行として、変動率(%)のトリム平均を表示します。ノードの影響度・スコア（PL合計×蓋然性）と揃えるため、増収・増益等のプラス方向（増加系ラベル）は対象外とし、マイナス方向（減少系ラベル）のみを対象にトリム平均を取ります。色は単色の濃淡のみで、変動率の大きさではなく該当する会社数（裏付けの厚さ）を表します。業種の行見出しには「このヒートマップに実際に出てくる会社数／有報からその業種として抽出された全会社数」を表示します。対象は「ホルムズ海峡封鎖」から辿れる原因ノードのみ。マイナス方向のエッジが一つも無い原因ノード（例:「賃料水準の上昇」が不動産業の増益にしか繋がらない場合）は列から除外します。行・列は3つのタグすべてに出てくる組み合わせの和集合で固定され、タグを切り替えても同じ並びのまま（該当しない組み合わせはグレー）。「業種×PL項目」ヒートマップと同じく、迂回路がある直接エッジ・手動非表示ノード・Step2ノード非表示の設定を反映します。</p>
     <div class="filter-row" id="causeHeatmapTagRow"></div>
     <div class="pl-heatmap-wrap" id="causeHeatmapWrap"></div>
+    <div class="formula-note">
+      <h3>「逆算(推計)」の計算式</h3>
+      <div class="formula-block">
+        <div class="formula-label">① 会社レベル（営業利益・経常利益ベース、41件）</div>
+        <code>v = COGS0 / R0　　（前年度の変動費率＝売上原価÷売上高）
+F = SGA0　　　　（前年度の固定費＝販管費）
+OP1 = OP0 × (1 + Δ%)　（Δ%は有報記載の営業利益・経常利益の増減率）
+R1 = (OP1 + F) / (1 - v)
+逆算した増減率 = (R1 - R0) / R0</code>
+      </div>
+      <div class="formula-block">
+        <div class="formula-label">② セグメントレベル（部門営業利益ベース、51件）</div>
+        <code>v = COGS0 / R0　　　　　　　　　　　　（会社全体の前年度変動費率）
+F_seg = SGA0(会社全体) × (R0_seg / R0会社全体)　（会社全体の販管費をセグメント売上シェアで按分）
+OP1_seg = OP0_seg × (1 + Δ%)　（Δ%は有報記載のセグメント利益の増減率）
+R1_seg = (OP1_seg + F_seg) / (1 - v)
+逆算した増減率 = (R1_seg - R0_seg) / R0_seg</code>
+      </div>
+      <div class="formula-block">
+        <div class="formula-label">注記</div>
+        <code>経常利益・当期純利益の増減率を使う場合は、①の式のΔ%にその増減率をそのまま代入する近似（営業利益と同様の操業レバレッジが働くと仮定）。
+いずれも「操業レバレッジが一定」という仮定の下での売上換算値であり、実際の売上の増減とは符号・大きさが異なる場合がある（詳細は各エッジのツールチップの原文・計算式を参照）。</code>
+      </div>
+    </div>
   </section>
 
   <footer class="hint">エッジにマウスオーバーすると根拠となった会社名・原文を表示します。上部のタグで業種を絞り込めます（複数選択可）。<strong>点線のエッジは資料に直接の記載がないAI推測</strong>による接続です（ホバーで推論理由を表示）。<strong>「ノード限定」</strong>をオンにしてノードをクリックすると、そのノードにつながる上流・下流だけに絞り込んで表示します。<strong>「企業へのネガティブ影響なしノード非表示」</strong>をオンにすると、下流を辿っても実在企業のPLにネガティブな影響が及ばないノード（影響が無い、または増収・増益などポジティブな影響しか無いノード）を隠します。</footer>
