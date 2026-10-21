@@ -685,6 +685,7 @@
   }
   .pl-heatmap-cell.is-na { background: transparent; }
   .pl-heatmap-table .is-hidden-col { display: none; }
+  .pl-heatmap-table .is-hidden-row { display: none; }
   .pl-heatmap-cell.is-empty { background: var(--surface-alt); }
   .pl-heatmap-nodata {
     color: var(--ink-faint); font-size: 8px; line-height: 1.2; white-space: normal;
@@ -4633,8 +4634,12 @@ function setStraightenOn(on) {
     const cellEls = new Map(); // nodeId -> td
     const colTds = new Map(heatLabels.map(l => [l, []])); // label -> [td, ...]（列の非表示切り替え用）
     const colNodeIds = new Map(heatLabels.map(l => [l, []])); // label -> [nodeId, ...]（列にデータがあるか判定用）
+    const rowTrByIndustry = new Map(); // industry -> tr（行の非表示切り替え用）
+    const rowNodeIds = new Map(); // industry -> [nodeId, ...]（行にデータがあるか判定用）
     heatIndustries.forEach(ind => {
       const tr = document.createElement('tr');
+      rowTrByIndustry.set(ind, tr);
+      rowNodeIds.set(ind, []);
       const rowTh = document.createElement('th');
       rowTh.className = 'pl-heatmap-row-head';
       const swatchColor = heatIndustryColor.get(ind) || 'var(--line-strong)';
@@ -4644,7 +4649,7 @@ function setStraightenOn(on) {
         const td = document.createElement('td');
         td.className = 'pl-heatmap-cell';
         const nodeId = cellNodeId.get(ind + '|' + label);
-        if (nodeId) { cellEls.set(nodeId, td); colNodeIds.get(label).push(nodeId); }
+        if (nodeId) { cellEls.set(nodeId, td); colNodeIds.get(label).push(nodeId); rowNodeIds.get(ind).push(nodeId); }
         else td.classList.add('is-na');
         colTds.get(label).push(td);
         tr.appendChild(td);
@@ -4698,6 +4703,12 @@ function setStraightenOn(on) {
         const forceHide = plHeatmapSimplify && PL_HEATMAP_SIMPLIFY_HIDE.has(label);
         colHeaderTh.get(label).classList.toggle('is-hidden-col', !hasData || forceHide);
         colTds.get(label).forEach(td => td.classList.toggle('is-hidden-col', !hasData || forceHide));
+      });
+      // 表示中の範囲から辿り着くPLノードが1つも無い行（＝業種を除外している、または
+      // そもそも関係の無い業種）も列と同じ基準で非表示にする。
+      heatIndustries.forEach(ind => {
+        const hasData = rowNodeIds.get(ind).some(nodeId => reached.has(nodeId));
+        rowTrByIndustry.get(ind).classList.toggle('is-hidden-row', !hasData);
       });
       caption.textContent = isHover
         ? `「${baseNodesById.get(focusId).label}」から辿れるPL項目のみ表示（ネガティブな変動率の平均）`
