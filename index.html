@@ -478,6 +478,7 @@
 
   .edge-prob-wrap { margin-top: 4px; }
   .edge-prob-title { font-size: 12px; font-weight: 700; color: var(--ink-muted); margin-bottom: 8px; }
+  .edge-prob-scale-row { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
   .edge-prob-list { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-start; }
   .edge-prob-col { flex: 1 1 170px; min-width: 170px; max-width: 260px; }
   .edge-prob-colhead {
@@ -1742,6 +1743,17 @@ function setStraightenOn(on) {
   // 蓋然性を4段階(1-4)と10段階(10%刻み、エッジのみ試験的に付与)のどちらの値で
   // 重み付けに使うか。10段階が設定されていないエッジ・ノードでは常に4段階にフォールバックする。
   let probabilityScale = '4';
+  // scoreModeRow内の永続的な4段階/10段階チップ（「エッジ蓋然性」編集ビューは切り替えの
+  // たびに作り直されるためここには登録しない。自分のクラスはrender時に直接計算する）。
+  const probabilityScaleChips = [];
+  function setProbabilityScale(scale) {
+    probabilityScale = scale;
+    probabilityScaleChips.forEach(({ el, scale: s }) => el.classList.toggle('active', s === scale));
+    invalidateExcludeScoreCache();
+    if (scenariosShown) applyScenarioDisplay();
+    refreshNodeScoreLabels();
+    refreshAllEdgeProbViews();
+  }
   // A→Cの直接エッジに対して、この図の中にA→B→Cのような2ホップ以上の迂回路が
   // 別に存在するなら、その直接エッジを非表示にするかどうか。デフォルトはオン。
   // シナリオ計算（computeAllScoredPaths/computeExcludeBest）がページ初期化時点で
@@ -2529,14 +2541,7 @@ function setStraightenOn(on) {
     prob10Chip.className = 'chip';
     prob10Chip.textContent = '10段階（試験）';
     prob10Chip.title = 'エッジに試験的に付与した蓋然性(10段階・10%刻み)の値をそのまま重み（%÷100）として使います。10段階が未設定のエッジは自動的に4段階の値にフォールバックします。ノード基準モードでは10段階の値を持たないため選べません。';
-    function setProbabilityScale(scale) {
-      probabilityScale = scale;
-      prob4Chip.classList.toggle('active', scale === '4');
-      prob10Chip.classList.toggle('active', scale === '10');
-      invalidateExcludeScoreCache();
-      if (scenariosShown) applyScenarioDisplay();
-      refreshNodeScoreLabels();
-    }
+    probabilityScaleChips.push({ el: prob4Chip, scale: '4' }, { el: prob10Chip, scale: '10' });
     prob4Chip.addEventListener('click', () => setProbabilityScale('4'));
     prob10Chip.addEventListener('click', () => setProbabilityScale('10'));
     function updateProbScaleVisibility(mode) {
@@ -3569,16 +3574,16 @@ function setStraightenOn(on) {
     URL.revokeObjectURL(url);
   }
   function exportEdgeProbsCsv() {
-    const rows = [['原因ラベル', '原因業種', '結果ラベル', '結果業種', '蓋然性(1-4)', '蓋然性根拠']];
+    const rows = [['原因ラベル', '原因業種', '結果ラベル', '結果業種', '蓋然性(1-4)', '蓋然性根拠', '蓋然性(10段階)', '蓋然性根拠(10段階)']];
     const seen = new Set();
     nodesById.forEach(node => {
       node.out.forEach(e => {
-        if (e.probability == null) return;
+        if (e.probability == null && e.probability10 == null) return;
         const key = e.source + '|' + e.target;
         if (seen.has(key)) return;
         seen.add(key);
         const s = nodesById.get(e.source), t = nodesById.get(e.target);
-        rows.push([s.label, s.industry || '', t.label, t.industry || '', e.probability, e.probabilityReason || '']);
+        rows.push([s.label, s.industry || '', t.label, t.industry || '', e.probability != null ? e.probability : '', e.probabilityReason || '', e.probability10 != null ? e.probability10 : '', e.probability10Reason || '']);
       });
     });
     const csv = '﻿' + rows.map(r => r.map(csvEscape).join(',')).join('\r\n');
@@ -3722,6 +3727,8 @@ function setStraightenOn(on) {
   // CSVダウンロード→元ファイルへの手動置き換えが必要な点は影響度・蓋然性マトリクスと同じ。
   let draggedEdgePairKey = null;
   const edgeProbRegistry = new Map(); // containerEl -> nodeIds, for in-place refresh after an edit
+  // このエディタ自体の表示・編集スケール（'4' or '10'）。「ノードのスコア計算方法」の
+  // 「蓋然性の段階」と連動させる（setProbabilityScaleから renderされ直す）。
   function renderEdgeProbInto(containerEl, nodeIds) {
     containerEl.innerHTML = '';
     const idSet = new Set(nodeIds);
@@ -3740,23 +3747,48 @@ function setStraightenOn(on) {
     if (pairs.size === 0) { edgeProbRegistry.delete(containerEl); return false; }
     edgeProbRegistry.set(containerEl, nodeIds);
 
+    const scale = probabilityScale; // '4' or '10'
+
     const title = document.createElement('div');
     title.className = 'edge-prob-title';
-    title.textContent = `因果エッジの蓋然性（${pairs.size}本・試験版）`;
+    title.textContent = `因果エッジの蓋然性（${pairs.size}本・試験版・${scale === '10' ? '10段階' : '4段階'}）`;
     containerEl.appendChild(title);
 
-    const buckets = [
-      { key: 'unset', label: '未設定\n（1.0相当）' },
-      { key: 1, label: '蓋然性1' },
-      { key: 2, label: '蓋然性2' },
-      { key: 3, label: '蓋然性3' },
-      { key: 4, label: '蓋然性4' },
-    ];
+    const scaleRow = document.createElement('div');
+    scaleRow.className = 'edge-prob-scale-row';
+    const scale4Chip = document.createElement('span');
+    scale4Chip.className = 'chip' + (scale === '4' ? ' active' : '');
+    scale4Chip.textContent = '4段階';
+    const scale10Chip = document.createElement('span');
+    scale10Chip.className = 'chip' + (scale === '10' ? ' active' : '');
+    scale10Chip.textContent = '10段階（試験）';
+    scale10Chip.title = '10段階が未設定のエッジは「未設定」列に表示されます（4段階へのフォールバックはこの編集ビューでは行いません）。';
+    scale4Chip.addEventListener('click', () => setProbabilityScale('4'));
+    scale10Chip.addEventListener('click', () => setProbabilityScale('10'));
+    scaleRow.appendChild(scale4Chip);
+    scaleRow.appendChild(scale10Chip);
+    containerEl.appendChild(scaleRow);
+
+    const buckets = scale === '10'
+      ? [{ key: 'unset', label: '未設定' }].concat([10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map(v => ({ key: v, label: v + '%' })))
+      : [
+          { key: 'unset', label: '未設定\n（1.0相当）' },
+          { key: 1, label: '蓋然性1' },
+          { key: 2, label: '蓋然性2' },
+          { key: 3, label: '蓋然性3' },
+          { key: 4, label: '蓋然性4' },
+        ];
     const byBucket = new Map(buckets.map(b => [b.key, []]));
     pairs.forEach((edgeList, key) => {
-      const p = edgeList[0].probability;
-      const bucketKey = (p != null && byBucket.has(Math.round(p))) ? Math.round(p) : 'unset';
-      byBucket.get(bucketKey).push({ key, edgeList });
+      if (scale === '10') {
+        const p10 = edgeList[0].probability10;
+        const bucketKey = (p10 != null && byBucket.has(p10)) ? p10 : 'unset';
+        byBucket.get(bucketKey).push({ key, edgeList });
+      } else {
+        const p = edgeList[0].probability;
+        const bucketKey = (p != null && byBucket.has(Math.round(p))) ? Math.round(p) : 'unset';
+        byBucket.get(bucketKey).push({ key, edgeList });
+      }
     });
 
     const list = document.createElement('div');
@@ -3779,7 +3811,11 @@ function setStraightenOn(on) {
         const pairKey = evt.dataTransfer.getData('text/plain') || draggedEdgePairKey;
         if (!pairKey || !pairs.has(pairKey)) return;
         const newVal = b.key === 'unset' ? null : b.key;
-        pairs.get(pairKey).forEach(e => { e.probability = newVal; });
+        if (scale === '10') {
+          pairs.get(pairKey).forEach(e => { e.probability10 = newVal; });
+        } else {
+          pairs.get(pairKey).forEach(e => { e.probability = newVal; });
+        }
         draggedEdgePairKey = null;
         invalidateExcludeScoreCache();
         refreshAllEdgeProbViews();
@@ -3791,9 +3827,13 @@ function setStraightenOn(on) {
         chip.className = 'edge-prob-chip';
         chip.draggable = true;
         chip.textContent = `${nodesById.get(e0.source).label} → ${nodesById.get(e0.target).label}`;
-        chip.title = e0.probabilityReason
-          ? `【蓋然性${e0.probability}の根拠】\n${e0.probabilityReason}`
-          : 'ドラッグして蓋然性を変更できます（未設定は1.0扱い）';
+        chip.title = scale === '10'
+          ? (e0.probability10Reason
+              ? `【蓋然性(10段階)${e0.probability10}%の根拠】\n${e0.probability10Reason}`
+              : 'ドラッグして蓋然性(10段階)を変更できます（未設定時はスコア計算で4段階にフォールバックします）')
+          : (e0.probabilityReason
+              ? `【蓋然性${e0.probability}の根拠】\n${e0.probabilityReason}`
+              : 'ドラッグして蓋然性を変更できます（未設定は1.0扱い）');
         chip.addEventListener('dragstart', evt => {
           draggedEdgePairKey = key;
           evt.dataTransfer.setData('text/plain', key);
@@ -3812,7 +3852,7 @@ function setStraightenOn(on) {
     const dlChip = document.createElement('span');
     dlChip.className = 'chip';
     dlChip.textContent = '変更をCSVとしてダウンロード';
-    dlChip.title = '現在のエッジ蓋然性の値（このセッション中の編集を含む）をCSVとして書き出します。ダウンロード後、プロジェクト内の元ファイルに手動で置き換えてください。';
+    dlChip.title = '現在のエッジ蓋然性の値（4段階・10段階とも、このセッション中の編集を含む）をCSVとして書き出します。ダウンロード後、プロジェクト内の元ファイルに手動で置き換えてください。';
     dlChip.addEventListener('click', exportEdgeProbsCsv);
     actions.appendChild(dlChip);
     containerEl.appendChild(actions);
