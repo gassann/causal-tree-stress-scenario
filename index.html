@@ -864,8 +864,8 @@
     <div class="formula-note">
       <h3>ノードの「累積蓋然性」の定義</h3>
       <div class="formula-block">
-        <code>各ノードの下に小さく表示される「累積蓋然性」は、根（入ってくるエッジが無いノード。例:「ホルムズ海峡封鎖」の祖先にあたる根）からそのノードまで、親→子の各エッジの蓋然性（「蓋然性の段階」で選んだ4段階／10段階の値）を掛け合わせたもの。
-根ノード自身は100%として扱う。
+        <code>各ノードの下に小さく表示される「累積蓋然性」は、「ホルムズ海峡封鎖」（このストレスシナリオの起点・常に100%の所与の前提として扱う）または他の根（入ってくるエッジが無いノード）からそのノードまで、親→子の各エッジの蓋然性（「蓋然性の段階」で選んだ4段階／10段階の値）を掛け合わせたもの。
+「ホルムズ海峡封鎖」自身は、祖先ノード（例:「米国・イスラエルによるイラン攻撃」）が別途データ上存在していても、その蓋然性は含めず常に100%として扱う（シナリオは「ホルムズ海峡封鎖が起きたら」を所与の前提とするため）。それ以外の根ノードは100%として扱う。
 累積蓋然性 ＝ 親ノードの累積蓋然性 × 親→子エッジの蓋然性
 1つのノードに複数の親エッジがある場合（複数の原因が合流する場合）は、各経路の累積蓋然性を単純に合計する。これは独立事象としての確率合成ではなく、合流する原因が多いほど起こりやすさが積み上がるという考え方のため、合流が多いノードでは100%を超える値になることがある。
 「ホルムズ海峡封鎖」と有向エッジで繋がっていない（祖先にも子孫にもあたらない）親エッジは、たまたま同じ結果ノードに合流するだけの無関係な独立した原因とみなし、合計から除外する。また「迂回路がある直接エッジを非表示」がオンの間は、その直接エッジ自体も無いものとして扱う。</code>
@@ -2138,7 +2138,11 @@ function setStraightenOn(on) {
     if (!cumulativeProbCache) cumulativeProbCache = new Map();
     if (cumulativeProbCache.has(id)) return cumulativeProbCache.get(id);
     const node = nodesById.get(id);
-    if (!node.in || node.in.length === 0) { cumulativeProbCache.set(id, 1); return 1; }
+    // 「ホルムズ海峡封鎖」はこのストレスシナリオの起点（所与の前提）として常に100%とし、
+    // それ自身の祖先（例:「米国・イスラエルによるイラン攻撃」）の蓋然性は累積に含めない。
+    // ツリー上のデータとしては残すが、累積蓋然性の計算上はホルムズ海峡封鎖を最初のノード
+    // として扱う。
+    if (!node.in || node.in.length === 0 || node.label === 'ホルムズ海峡封鎖') { cumulativeProbCache.set(id, 1); return 1; }
     if (visiting.has(id)) return 0; // 循環防止（グラフ全体がDAGである前提）
     visiting.add(id);
     let total = 0;
@@ -3342,6 +3346,9 @@ function setStraightenOn(on) {
     const node = nodesById.get(id);
     const total = cumulativeProbability(id, new Set());
     const pct = Math.round(total * 100);
+    if (node.label === 'ホルムズ海峡封鎖') {
+      return `<div class="tt-quote">累積蓋然性 ${pct}%（このシナリオの起点のため100%。祖先ノードの蓋然性は含めない）</div>`;
+    }
     if (!node.in || node.in.length === 0) {
       return `<div class="tt-quote">累積蓋然性 ${pct}%（根ノードのため100%）</div>`;
     }
