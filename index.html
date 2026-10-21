@@ -1416,9 +1416,19 @@ function setStraightenOn(on) {
   const activeIndustries = new Set();
   // 「業種で絞り込み」（選択した業種だけを表示）とは別に、「選択した業種だけを除外」
   // するための独立したフィルター。両方同時に使うこともできる（絞り込みで残った中から、
-  // さらに除外業種を取り除く）。表示の絞り込みのみに影響し、ツリー構造・シナリオ計算は
-  // 変えない（既存の「業種で絞り込み」と同じ方針）。
+  // さらに除外業種を取り除く）。「ツリー構造を変えるタグ」として扱うため、表示だけで
+  // なくスコア計算・シナリオ算出にも反映する（isIndustryScoreExcluded）。
   const excludedIndustries = new Set();
+  // エッジ単位の判定（表示フィルター用）。applyVisibility()・showIsolationFocus()の
+  // 両方から使うため、どちらの関数の外（トップレベル）に置く。
+  function industryPasses(e) {
+    return (activeIndustries.size === 0 || activeIndustries.has(e.industry)) && !excludedIndustries.has(e.industry);
+  }
+  // ノード単位の判定（そのノードの入出どちらかのエッジが1本でも通れば表示する）。
+  function industryNodePasses(id) {
+    const n = nodesById.get(id);
+    return [...n.in, ...n.out].some(e => industryPasses(e));
+  }
 
   // PL/BSの勘定科目そのもの（build_node_edge_tables.py側で業種別に分割されたノード）は、
   // 枠線の色で業種を示す。ラベル文字列には業種名を含めない。
@@ -4311,9 +4321,9 @@ function setStraightenOn(on) {
     // この絞り込みを適用しても「深い階層のノードが切り捨てられる」ことはない。ここで
     // 本当に消えるのは、辿っても実在企業の影響に一切繋がらない枝だけなので、起点にした
     // ツリー表示でも引き続き適用する。
-    const isoNodeIds = Array.from(isoSet).filter(id => id === focusId || ((!hideNoImpactNodes || companyImpactKeepSet.has(id)) && positivePlPasses(id) && regionPasses(id) && step2NodePasses(id) && scenarioNodePasses(id) && manualHidePasses(id)));
+    const isoNodeIds = Array.from(isoSet).filter(id => id === focusId || (industryNodePasses(id) && (!hideNoImpactNodes || companyImpactKeepSet.has(id)) && positivePlPasses(id) && regionPasses(id) && step2NodePasses(id) && scenarioNodePasses(id) && manualHidePasses(id)));
     const keptSet = new Set(isoNodeIds);
-    const isoEdges = edges.filter(e => keptSet.has(e.source) && keptSet.has(e.target) && e.source !== e.target);
+    const isoEdges = edges.filter(e => keptSet.has(e.source) && keptSet.has(e.target) && e.source !== e.target && industryPasses(e));
     const svg = renderGraphSvg(isoNodeIds, isoEdges, { idSeq: 'iso', registerGlobal: false, responsive: true, focusId });
     const wrap = document.getElementById('isolationSvgWrap');
     wrap.innerHTML = '';
@@ -4397,9 +4407,6 @@ function setStraightenOn(on) {
       });
     }
 
-    function industryPasses(e) {
-      return (activeIndustries.size === 0 || activeIndustries.has(e.industry)) && !excludedIndustries.has(e.industry);
-    }
     function impactPasses(id) { return !hideNoImpactNodes || companyImpactKeepSet.has(id); }
     function edgeShown(e) {
       return visibleByCollapse.has(e.source) && visibleByCollapse.has(e.target) && industryPasses(e) &&
@@ -4422,8 +4429,7 @@ function setStraightenOn(on) {
     // collapse state hides its children, not itself, so a root whose only edge gets hidden by
     // its own collapse must stay visible.
     nodeDom.forEach(({ g, node }) => {
-      const anyIndustryMatch = [...node.in, ...node.out].some(e => industryPasses(e));
-      const shown = visibleByCollapse.has(node.id) && anyIndustryMatch && impactPasses(node.id) && positivePlPasses(node.id) && regionPasses(node.id) && step2NodePasses(node.id) && scenarioNodePasses(node.id) && manualHidePasses(node.id);
+      const shown = visibleByCollapse.has(node.id) && industryNodePasses(node.id) && impactPasses(node.id) && positivePlPasses(node.id) && regionPasses(node.id) && step2NodePasses(node.id) && scenarioNodePasses(node.id) && manualHidePasses(node.id);
       g.classList.toggle('is-hidden', !shown);
     });
 
