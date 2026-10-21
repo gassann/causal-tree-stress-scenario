@@ -861,6 +861,15 @@
 100% 　制度・仕組み上ほぼ確実に発生（燃料費調整制度のような機械的パススルー等）</code>
       </div>
     </div>
+    <div class="formula-note">
+      <h3>ノードの「累積蓋然性」の定義</h3>
+      <div class="formula-block">
+        <code>各ノードの下に小さく表示される「累積蓋然性」は、根（入ってくるエッジが無いノード。例:「ホルムズ海峡封鎖」）からそのノードまで、親→子の各エッジの蓋然性（「蓋然性の段階」で選んだ4段階／10段階の値）を掛け合わせたもの。
+根ノード自身は100%として扱う。
+累積蓋然性 ＝ 親ノードの累積蓋然性 × 親→子エッジの蓋然性
+1つのノードに複数の親エッジがある場合（複数の原因が合流する場合）は、各経路の累積蓋然性を単純に合計する。これは独立事象としての確率合成ではなく、合流する原因が多いほど起こりやすさが積み上がるという考え方のため、合流が多いノードでは100%を超える値になることがある。</code>
+      </div>
+    </div>
   </section>
 
   <footer class="hint">エッジにマウスオーバーすると根拠となった会社名・原文を表示します。上部のタグで業種を絞り込めます（複数選択可）。<strong>点線のエッジは資料に直接の記載がないAI推測</strong>による接続です（ホバーで推論理由を表示）。<strong>「ノード限定」</strong>をオンにしてノードをクリックすると、そのノードにつながる上流・下流だけに絞り込んで表示します。<strong>「企業へのネガティブ影響なしノード非表示」</strong>をオンにすると、下流を辿っても実在企業のPLにネガティブな影響が及ばないノード（影響が無い、または増収・増益などポジティブな影響しか無いノード）を隠します。</footer>
@@ -2116,7 +2125,40 @@ function setStraightenOn(on) {
     }
     return excludeScoreCache;
   }
-  function invalidateExcludeScoreCache() { excludeScoreCache = null; totalImpactCache = null; }
+  function invalidateExcludeScoreCache() { excludeScoreCache = null; totalImpactCache = null; cumulativeProbCache = null; }
+
+  // ノードの「累積蓋然性」＝根（入ってくるエッジが無いノード）から、親→子エッジの
+  // 蓋然性（edgeProbabilityWeight、「蓋然性の段階」トグルに連動）を掛けながら辿った値。
+  // 複数の親エッジがある場合は、それぞれの経路の累積値を単純に合計する（複数の原因から
+  // 合流する場合、起こりやすさが積み上がるという考え方。独立事象の確率合成ではないため、
+  // 合流が多いノードでは100%を超えることがある）。根ノード自身は1（100%）として扱う。
+  let cumulativeProbCache = null;
+  function cumulativeProbability(id, visiting) {
+    if (!cumulativeProbCache) cumulativeProbCache = new Map();
+    if (cumulativeProbCache.has(id)) return cumulativeProbCache.get(id);
+    const node = nodesById.get(id);
+    if (!node.in || node.in.length === 0) { cumulativeProbCache.set(id, 1); return 1; }
+    if (visiting.has(id)) return 0; // 循環防止（グラフ全体がDAGである前提）
+    visiting.add(id);
+    let total = 0;
+    parentWeights(node).forEach((w, srcId) => { total += cumulativeProbability(srcId, visiting) * w; });
+    visiting.delete(id);
+    cumulativeProbCache.set(id, total);
+    return total;
+  }
+  // 同じ原因→結果の関係が、引用元の会社ごとに複数のエッジとして重複登録されていることが
+  // あるため（蓋然性の値自体は同じキーなら常に同一）、合計が水増しされないよう親ノードid
+  // ごとに重みが最大の1本だけを代表させる。戻り値: Map(親ノードid -> 重み)。
+  function parentWeights(node) {
+    const bySource = new Map();
+    (node.in || []).forEach(e => {
+      if (e.source === e.target) return;
+      const w = edgeProbabilityWeight(e);
+      const existing = bySource.get(e.source);
+      if (existing == null || w > existing) bySource.set(e.source, w);
+    });
+    return bySource;
+  }
 
   // 表示用の「影響度」＝最終ノード（PLに直接繋がるノード）はそのノード自身の直接PL合計
   // （excludeScoreCacheのplSum）、それ以外のノードは子ノードたち（entry.childCandidates。
@@ -2693,17 +2735,19 @@ function setStraightenOn(on) {
   //   そのもので、スコアの計算式自体が影響度(1-4)×蓋然性(1-4)なので両方の生値を示す。
   function nodeScoreImpactLabel(id) {
     const node = nodesById.get(id);
+    const cumText = `累積蓋然性${Math.round(cumulativeProbability(id, new Set()) * 100)}%`;
     if (scoreMode !== 'exclude') {
       if (node.impact == null) return null;
       const score = nodeScore(id);
-      return scoreMode === 'zone'
+      const base = scoreMode === 'zone'
         ? `影響度${node.impact} + 蓋然性${node.probability} → ゾーン${score}`
         : `影響度${node.impact} × 蓋然性${node.probability} = ${score}`;
+      return `${base} / ${cumText}`;
     }
     const entry = ensureExcludeScoreCache().get(id);
     if (!entry) return null;
     const impact = computeTotalImpact(id, new Set());
-    return `影響度${impact.toFixed(2)} / スコア${entry.raw.toFixed(2)}`;
+    return `影響度${impact.toFixed(2)} / スコア${entry.raw.toFixed(2)} / ${cumText}`;
   }
 
   // レイアウト時のノード枠の高さは計算方式を切り替えても変わらないよう、どちらの方式でも
@@ -3232,9 +3276,26 @@ function setStraightenOn(on) {
     rows.sort((a, b) => b.mean - a.mean);
     return rows;
   }
+  // 累積蓋然性の内訳（各親エッジの「親の累積蓋然性 × このエッジの重み」を列挙）。
+  // 親が複数ある場合はcumulativeProbability自体と同じく単純合計。
+  function buildCumulativeProbTooltipHtml(id) {
+    const node = nodesById.get(id);
+    const total = cumulativeProbability(id, new Set());
+    const pct = Math.round(total * 100);
+    if (!node.in || node.in.length === 0) {
+      return `<div class="tt-quote">累積蓋然性 ${pct}%（根ノードのため100%）</div>`;
+    }
+    const lines = Array.from(parentWeights(node).entries()).map(([srcId, w]) => {
+      const parentPct = Math.round(cumulativeProbability(srcId, new Set()) * 100);
+      const contrib = Math.round(cumulativeProbability(srcId, new Set()) * w * 100);
+      return `「${escapeHtml(nodesById.get(srcId).label)}」${parentPct}% × 重み${w.toFixed(2)} = ${contrib}%`;
+    });
+    const sumNote = lines.length > 1 ? '（複数の親経路の値を合計）' : '';
+    return `<div class="tt-quote">累積蓋然性 ${pct}%${sumNote}<br>${lines.join('<br>')}</div>`;
+  }
   function buildNodeScoreTooltipHtml(id) {
     const n = scoreNodesById.get(id);
-    const header = `<div class="tt-company">${escapeHtml(n.label)}</div>`;
+    const header = `<div class="tt-company">${escapeHtml(n.label)}</div>` + buildCumulativeProbTooltipHtml(id);
     if (scoreMode !== 'exclude') {
       // 影響度×蓋然性／マトリクス色ゾーンは、ノード自身に影響度(1-4)が設定されている
       // ことが前提（下流に評価済みノードがあっても代わりにはならない）。
@@ -3819,6 +3880,7 @@ function setStraightenOn(on) {
         draggedEdgePairKey = null;
         invalidateExcludeScoreCache();
         refreshAllEdgeProbViews();
+        refreshNodeScoreLabels();
         if (scenariosShown) applyScenarioDisplay();
       });
       (byBucket.get(b.key) || []).forEach(({ key, edgeList }) => {
