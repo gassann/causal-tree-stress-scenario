@@ -3782,8 +3782,10 @@ function setStraightenOn(on) {
     nodesById.forEach((node, id) => {
       if (isManuallyHiddenNode(node) || isStep2ScoreExcluded(id)) return;
       let best = null;
-      node.out.forEach(e => {
-        const t = nodesById.get(e.target);
+      // PL到達の判定は「PLノードを非表示」タグの状態に関わらず、常にPLノードを含む
+      // 完全なデータ（scoreBaseOutAdj/scoreBaseNodesById）で行う（computeExcludeBestと同じ方針）。
+      (scoreBaseOutAdj.get(id) || []).forEach(e => {
+        const t = scoreBaseNodesById.get(e.target);
         if (!t || !t.industry || t.plPositive) return; // PL/BS勘定科目のうち、ネガティブ方向のみ対象
         if (isRedundantEdge(id, e.target)) return;
         if (isManuallyHiddenNode(t)) return;
