@@ -1418,7 +1418,8 @@ function setStraightenOn(on) {
   // するための独立したフィルター。両方同時に使うこともできる（絞り込みで残った中から、
   // さらに除外業種を取り除く）。「ツリー構造を変えるタグ」として扱うため、表示だけで
   // なくスコア計算・シナリオ算出にも反映する（isIndustryScoreExcluded）。
-  const excludedIndustries = new Set();
+  // デフォルトで不動産業を除外しておく（ユーザー指定）。
+  const excludedIndustries = new Set(industries.includes('不動産業') ? ['不動産業'] : []);
   // エッジ単位の判定（表示フィルター用）。applyVisibility()・showIsolationFocus()の
   // 両方から使うため、どちらの関数の外（トップレベル）に置く。
   function industryPasses(e) {
@@ -1673,7 +1674,7 @@ function setStraightenOn(on) {
   }
 
   const excludeIndustryResetChip = document.createElement('span');
-  excludeIndustryResetChip.className = 'chip reset active';
+  excludeIndustryResetChip.className = 'chip reset' + (excludedIndustries.size === 0 ? ' active' : '');
   excludeIndustryResetChip.textContent = '除外なし';
   excludeIndustryResetChip.addEventListener('click', () => {
     excludedIndustries.clear();
@@ -1685,7 +1686,7 @@ function setStraightenOn(on) {
 
   industries.forEach(ind => {
     const chip = document.createElement('span');
-    chip.className = 'chip';
+    chip.className = 'chip' + (excludedIndustries.has(ind) ? ' active' : '');
     chip.dataset.industryExclude = ind;
     chip.textContent = ind;
     chip.title = `「${ind}」が報告した因果関係（エッジ）をツリーから取り除きます。スコア計算・シナリオ算出にも反映されます。`;
