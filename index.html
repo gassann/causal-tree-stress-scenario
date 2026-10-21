@@ -3223,15 +3223,34 @@ function setStraightenOn(on) {
       sourceLine +
       `<div class="tt-quote">「${escapeHtml(edge.original_text)}」</div>`;
   }
+  // 原因→結果エッジ自体の蓋然性（「蓋然性の段階」トグルに連動）。同じノードペアの
+  // エッジは全て同じCSVキーから割り振られているため値は共通で、グループの先頭1件だけ
+  // 見れば十分（renderTooltipEntryのように出現元ごとに繰り返す必要はない）。
+  function probabilityTooltipLine(e) {
+    if (e.probability == null && e.probability10 == null) return '';
+    const useTen = probabilityScale === '10';
+    let line;
+    if (useTen && e.probability10 != null) {
+      line = `蓋然性(10段階): ${e.probability10}%`;
+      if (e.probability10Reason) line += `<br><span style="opacity:.8">根拠: ${escapeHtml(e.probability10Reason)}</span>`;
+    } else {
+      line = e.probability != null
+        ? `蓋然性(1-4): ${e.probability}` + (useTen ? '（10段階は未設定のため4段階にフォールバック）' : '')
+        : '';
+      if (e.probabilityReason) line += `<br><span style="opacity:.8">根拠: ${escapeHtml(e.probabilityReason)}</span>`;
+    }
+    return line ? `<div class="tt-quote">${line}</div>` : '';
+  }
   function showTooltip(evt, edgeList) {
     const list = Array.isArray(edgeList) ? edgeList : [edgeList];
     const countLine = list.length > 1
       ? `<div class="tt-count">出現数：${list.length}</div>`
       : '';
+    const probLine = probabilityTooltipLine(list[0]);
     const entries = list.map((e, i) =>
       (i > 0 ? '<div class="tt-sep"></div>' : '') + renderTooltipEntry(e)
     ).join('');
-    tooltip.innerHTML = countLine + entries;
+    tooltip.innerHTML = countLine + probLine + entries;
     tooltip.classList.add('show');
     positionTooltip(evt);
   }
