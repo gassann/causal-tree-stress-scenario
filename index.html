@@ -2277,6 +2277,8 @@ function setStraightenOn(on) {
     const count = Math.max(1, Math.min(8, parseInt(document.getElementById('scenarioCount').value, 10) || 1));
     if (scoreMode === 'exclude') {
       currentScenarios = computeExcludeScenariosGlobal(count);
+    } else if (scoreMode === 'cumprob') {
+      currentScenarios = computeCumProbScenariosGlobal(count);
     } else {
       const overlapPct = Math.max(0, Math.min(100, parseInt(document.getElementById('scenarioOverlap').value, 10) || 0));
       currentScenarios = pickDiverseScenarios(count, overlapPct);
@@ -2601,6 +2603,10 @@ function setStraightenOn(on) {
     excludeChip.className = 'chip active';
     excludeChip.textContent = 'PL合計×蓋然性（除外して再計算）';
     excludeChip.title = 'PL/BS勘定科目（業種ごとに1ノード）ごとに増減率(%)のトリム平均を取り、影響が及ぶノードの数だけ合計します。蓋然性(1-4)は4→1.0/3→0.73/2→0.5/1→0.25の重みに変換して掛けながら根まで最大値で伝播し、上位シナリオで使われた最下層ノード（原因ノード自身）を除外して再計算することで次点のシナリオを求めるため、重複許容率の調整は不要です。蓋然性をノード／エッジのどちらの値で使うかは下の「蓋然性の算出元」で切り替えられます。';
+    const cumProbChip = document.createElement('span');
+    cumProbChip.className = 'chip';
+    cumProbChip.textContent = '累積蓋然性のみ（最尤経路）';
+    cumProbChip.title = 'PL/BSへの影響度は一切使わず、「ホルムズ海峡封鎖」を起点とした累積蓋然性（各ノード下に表示されている値）だけでシナリオを選びます。累積蓋然性が最も大きいPL直結ノードを上位から選び、その経路は各段で寄与が最大の親を遡って復元します。上位シナリオで使われた原因ノードは除外して次点を探すため、重複許容率の調整は不要です。';
 
     // ---- probability source: node-level vs edge-level (same row, visible only in 'exclude' mode) ----
     const pmLabel = document.createElement('span');
@@ -2632,7 +2638,7 @@ function setStraightenOn(on) {
     prob4Chip.addEventListener('click', () => setProbabilityScale('4'));
     prob10Chip.addEventListener('click', () => setProbabilityScale('10'));
     function updateProbScaleVisibility(mode) {
-      const show = mode === 'exclude' && probabilityMode === 'edge';
+      const show = (mode === 'exclude' && probabilityMode === 'edge') || mode === 'cumprob';
       psLabel.style.display = show ? '' : 'none';
       prob4Chip.style.display = show ? '' : 'none';
       prob10Chip.style.display = show ? '' : 'none';
@@ -2665,19 +2671,23 @@ function setStraightenOn(on) {
       productChip.classList.toggle('active', mode === 'product');
       zoneChip.classList.toggle('active', mode === 'zone');
       excludeChip.classList.toggle('active', mode === 'exclude');
+      cumProbChip.classList.toggle('active', mode === 'cumprob');
       const overlapLabel = document.getElementById('scenarioOverlap');
-      if (overlapLabel) overlapLabel.closest('label').style.display = mode === 'exclude' ? 'none' : '';
+      const hideOverlap = mode === 'exclude' || mode === 'cumprob';
+      if (overlapLabel) overlapLabel.closest('label').style.display = hideOverlap ? 'none' : '';
       updateProbModeVisibility(mode);
-      if (mode !== 'exclude') allScoredPaths = computeAllScoredPaths();
+      if (mode !== 'exclude' && mode !== 'cumprob') allScoredPaths = computeAllScoredPaths();
       if (scenariosShown) applyScenarioDisplay();
       refreshNodeScoreLabels();
     }
     productChip.addEventListener('click', () => setScoreMode('product'));
     zoneChip.addEventListener('click', () => setScoreMode('zone'));
     excludeChip.addEventListener('click', () => setScoreMode('exclude'));
+    cumProbChip.addEventListener('click', () => setScoreMode('cumprob'));
     scoreModeRow.appendChild(productChip);
     scoreModeRow.appendChild(zoneChip);
     scoreModeRow.appendChild(excludeChip);
+    scoreModeRow.appendChild(cumProbChip);
     scoreModeRow.appendChild(pmLabel);
     scoreModeRow.appendChild(probNodeChip);
     scoreModeRow.appendChild(probEdgeChip);
@@ -2701,7 +2711,7 @@ function setStraightenOn(on) {
 
     const overlapLabel = document.createElement('label');
     overlapLabel.innerHTML = '重複許容率(%) <input type="number" id="scenarioOverlap" min="0" max="100" step="10" value="50">';
-    overlapLabel.style.display = scoreMode === 'exclude' ? 'none' : '';
+    overlapLabel.style.display = (scoreMode === 'exclude' || scoreMode === 'cumprob') ? 'none' : '';
     scenarioRow.appendChild(overlapLabel);
 
     const scenarioToggleChip = document.createElement('span');
@@ -2780,7 +2790,11 @@ function setStraightenOn(on) {
   //   そのもので、スコアの計算式自体が影響度(1-4)×蓋然性(1-4)なので両方の生値を示す。
   function nodeScoreImpactLabel(id) {
     const node = nodesById.get(id);
-    const cumText = `累積蓋然性${Math.round(cumulativeProbability(id, new Set()) * 100)}%`;
+    const cumProb = cumulativeProbability(id, new Set());
+    const cumText = `累積蓋然性${Math.round(cumProb * 100)}%`;
+    if (scoreMode === 'cumprob') {
+      return cumProb > 0 ? cumText : null; // 影響度・PLデータは一切使わず累積蓋然性のみを表示
+    }
     if (scoreMode !== 'exclude') {
       if (node.impact == null) return null;
       const score = nodeScore(id);
@@ -2800,7 +2814,7 @@ function setStraightenOn(on) {
   // 計算方式に応じて書き換える）。
   function nodeScoreLineReserved(id) {
     const node = nodesById.get(id);
-    return node.impact != null || ensureExcludeScoreCache().has(id);
+    return node.impact != null || ensureExcludeScoreCache().has(id) || cumulativeProbability(id, new Set()) > 0;
   }
 
   // 「ノードのスコア計算方法」「蓋然性の算出元」を切り替えた時に、既に描画済みのノード
@@ -3363,6 +3377,11 @@ function setStraightenOn(on) {
   function buildNodeScoreTooltipHtml(id) {
     const n = scoreNodesById.get(id);
     const header = `<div class="tt-company">${escapeHtml(n.label)}</div>` + buildCumulativeProbTooltipHtml(id);
+    if (scoreMode === 'cumprob') {
+      // 累積蓋然性のみモードでは、影響度・PLデータは一切使わないため、headerの累積蓋然性の
+      // 内訳（buildCumulativeProbTooltipHtml）だけで説明が完結する。
+      return header;
+    }
     if (scoreMode !== 'exclude') {
       // 影響度×蓋然性／マトリクス色ゾーンは、ノード自身に影響度(1-4)が設定されている
       // ことが前提（下流に評価済みノードがあっても代わりにはならない）。
@@ -3749,6 +3768,66 @@ function setStraightenOn(on) {
     });
     all.sort((a, b) => b.avg - a.avg);
     return all.slice(0, count);
+  }
+
+  // ---- 累積蓋然性のみを使ったシナリオ算出（試験版） ----
+  // 影響度・PL増減率は一切使わず、「ホルムズ海峡封鎖」を起点とした累積蓋然性
+  // （cumulativeProbability、ノードの下に常時表示している値と同じもの）だけでシナリオを
+  // 選ぶ。「結果PLノードに直結する原因ノード（bottomNode）」を候補とし、累積蓋然性が
+  // 大きい順に採用・除外して次点を探す（PL合計×蓋然性の「除外して再計算」と同じ考え方）。
+  // 各bottomNodeから根までの経路は、各段で寄与（親の累積蓋然性×エッジの重み）が最大の親を
+  // 遡って復元する（cumulativeProbabilityの合計計算で実際に支配的だった経路と一致する）。
+  function cumProbBottomCandidates() {
+    const candidates = new Map(); // bottomNodeId -> 代表のPL直結エッジ
+    nodesById.forEach((node, id) => {
+      if (isManuallyHiddenNode(node) || isStep2ScoreExcluded(id)) return;
+      let best = null;
+      node.out.forEach(e => {
+        const t = nodesById.get(e.target);
+        if (!t || !t.industry || t.plPositive) return; // PL/BS勘定科目のうち、ネガティブ方向のみ対象
+        if (isRedundantEdge(id, e.target)) return;
+        if (isManuallyHiddenNode(t)) return;
+        if (isStep2ScoreExcluded(e.target)) return;
+        if (!best) best = e;
+      });
+      if (best) candidates.set(id, best);
+    });
+    return candidates;
+  }
+  function cumProbPathTo(bottomNodeId) {
+    const path = [];
+    let cur = bottomNodeId, guard = 0;
+    while (guard++ < 200) {
+      path.unshift(cur);
+      const node = nodesById.get(cur);
+      if (node.label === 'ホルムズ海峡封鎖' || !node.in || node.in.length === 0) break;
+      let bestParent = null, bestVal = -1;
+      parentWeights(node).forEach((w, srcId) => {
+        const v = cumulativeProbability(srcId, new Set()) * w;
+        if (v > bestVal) { bestVal = v; bestParent = srcId; }
+      });
+      if (bestParent == null) break; // ホルムズ海峡封鎖と無関係などで、これ以上遡れない
+      cur = bestParent;
+    }
+    return path;
+  }
+  function computeCumProbScenariosGlobal(count) {
+    const candidates = cumProbBottomCandidates();
+    const excludedNodes = new Set();
+    const scenarios = [];
+    for (let k = 0; k < count; k++) {
+      let bestId = null, bestScore = -1, bestEdge = null;
+      candidates.forEach((edge, id) => {
+        if (excludedNodes.has(id)) return;
+        const score = cumulativeProbability(id, new Set());
+        if (score > bestScore) { bestScore = score; bestId = id; bestEdge = edge; }
+      });
+      if (bestId == null || bestScore <= 0) break;
+      const path = cumProbPathTo(bestId).concat([bestEdge.target]);
+      scenarios.push({ avg: bestScore, score: bestScore, path, terminalEdge: bestEdge });
+      excludedNodes.add(bestId);
+    }
+    return scenarios;
   }
 
   let draggedNodeId = null; // fallback for browsers/contexts where dataTransfer read-back is finicky
