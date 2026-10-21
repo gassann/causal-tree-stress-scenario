@@ -734,7 +734,6 @@
     <div class="control-panel" id="controlPanel">
       <div class="stats" id="stats"></div>
       <div class="filter-row" id="filterRow"></div>
-      <div class="filter-row" id="industryExcludeRow"></div>
       <div class="filter-row" id="displayRow"></div>
       <div class="filter-row" id="structureFilterRow"></div>
       <div class="filter-row" id="revenueSplitRow"></div>
@@ -1622,43 +1621,6 @@ function setStraightenOn(on) {
     filterRow.appendChild(chip);
   });
 
-  // ---- industry exclude chips ----
-  const industryExcludeRow = document.getElementById('industryExcludeRow');
-  const excludeLabel = document.createElement('span');
-  excludeLabel.className = 'filter-label';
-  excludeLabel.textContent = '業種を除外';
-  industryExcludeRow.appendChild(excludeLabel);
-
-  const excludeResetChip = document.createElement('span');
-  excludeResetChip.className = 'chip reset active';
-  excludeResetChip.textContent = '除外なし';
-  excludeResetChip.addEventListener('click', () => {
-    excludedIndustries.clear();
-    document.querySelectorAll('.chip[data-industry-exclude]').forEach(c => c.classList.remove('active'));
-    excludeResetChip.classList.add('active');
-    applyVisibility();
-  });
-  industryExcludeRow.appendChild(excludeResetChip);
-
-  industries.forEach(ind => {
-    const chip = document.createElement('span');
-    chip.className = 'chip';
-    chip.dataset.industryExclude = ind;
-    chip.textContent = ind;
-    chip.addEventListener('click', () => {
-      if (excludedIndustries.has(ind)) {
-        excludedIndustries.delete(ind);
-        chip.classList.remove('active');
-      } else {
-        excludedIndustries.add(ind);
-        chip.classList.add('active');
-      }
-      excludeResetChip.classList.toggle('active', excludedIndustries.size === 0);
-      applyVisibility();
-    });
-    industryExcludeRow.appendChild(chip);
-  });
-
   // ---- display mode: collapse all / expand all ----
   // タグは効く段階ごとに行を分けている:
   // ・displayRow: 表示の絞り込み・ナビゲーション（ツリー構造もシナリオ計算も変えない）
@@ -1677,6 +1639,59 @@ function setStraightenOn(on) {
   structureFilterLabel.className = 'filter-label';
   structureFilterLabel.textContent = 'ツリー構造を変えるタグ（シナリオ計算にも反映されます）';
   structureFilterRow.appendChild(structureFilterLabel);
+
+  // ---- 業種を除外 ----
+  // 選択した業種（エッジのe.industry＝原因・結果を報告した会社の業種）を、表示だけで
+  // なくスコア計算・シナリオ算出（PL合計×蓋然性／累積蓋然性のみ）からも取り除く。
+  // isRedundantEdge/isManuallyHiddenNode/isStep2ScoreExcludedと同じ「構造を決めるタグ」
+  // として扱う（industryScoreExcluded、宣言はcomputeAllScoredPathsより前）。
+  const industryExcludeLabel = document.createElement('span');
+  industryExcludeLabel.className = 'filter-label';
+  industryExcludeLabel.textContent = '業種を除外';
+  industryExcludeLabel.style.marginLeft = '14px';
+  structureFilterRow.appendChild(industryExcludeLabel);
+
+  function refreshAfterStructureChange() {
+    applyVisibility();
+    refreshIsolationIfOpen();
+    invalidateExcludeScoreCache();
+    allScoredPaths = computeAllScoredPaths();
+    refreshPlHeatmapFilters();
+    refreshCauseHeatmap();
+    refreshNodeScoreLabels();
+    if (scenariosShown) applyScenarioDisplay();
+  }
+
+  const excludeIndustryResetChip = document.createElement('span');
+  excludeIndustryResetChip.className = 'chip reset active';
+  excludeIndustryResetChip.textContent = '除外なし';
+  excludeIndustryResetChip.addEventListener('click', () => {
+    excludedIndustries.clear();
+    document.querySelectorAll('.chip[data-industry-exclude]').forEach(c => c.classList.remove('active'));
+    excludeIndustryResetChip.classList.add('active');
+    refreshAfterStructureChange();
+  });
+  structureFilterRow.appendChild(excludeIndustryResetChip);
+
+  industries.forEach(ind => {
+    const chip = document.createElement('span');
+    chip.className = 'chip';
+    chip.dataset.industryExclude = ind;
+    chip.textContent = ind;
+    chip.title = `「${ind}」が報告した因果関係（エッジ）をツリーから取り除きます。スコア計算・シナリオ算出にも反映されます。`;
+    chip.addEventListener('click', () => {
+      if (excludedIndustries.has(ind)) {
+        excludedIndustries.delete(ind);
+        chip.classList.remove('active');
+      } else {
+        excludedIndustries.add(ind);
+        chip.classList.add('active');
+      }
+      excludeIndustryResetChip.classList.toggle('active', excludedIndustries.size === 0);
+      refreshAfterStructureChange();
+    });
+    structureFilterRow.appendChild(chip);
+  });
 
   const postFixRow = document.getElementById('postFixRow');
   const postFixLabel = document.createElement('span');
@@ -1854,6 +1869,9 @@ function setStraightenOn(on) {
     const n = scoreNodesById.get(id);
     return !!n && !!n.isNew;
   }
+  // 「業種を除外」も同じ理由でシナリオ計算に反映する。excludedIndustriesの宣言は
+  // これより前（industries/activeIndustriesの近く）にある。
+  function isIndustryScoreExcluded(e) { return excludedIndustries.has(e.industry); }
   function zoneScoreOf(impact, probability) {
     const sum = impact + probability;
     if (sum <= 3) return 1;
@@ -1884,6 +1902,7 @@ function setStraightenOn(on) {
         if (isRedundantEdge(id, e.target)) return; // 迂回路により非表示になっている直接エッジは無いものとして扱う
         if (isManuallyHiddenNode(scoreNodesById.get(e.target))) return;
         if (isStep2ScoreExcluded(e.target)) return; // Step2ノードを非表示にしている場合は除外後のツリーとして扱う
+        if (isIndustryScoreExcluded(e)) return; // 業種を除外している場合は除外後のツリーとして扱う
         targets.add(e.target);
       });
       inducedAdj.set(id, Array.from(targets));
@@ -2007,6 +2026,7 @@ function setStraightenOn(on) {
         if (isRedundantEdge(id, e.target)) return; // 迂回路により非表示になっている直接エッジは無いものとして扱う
         if (isManuallyHiddenNode(t)) return; // 手動で非表示にしたノードは除外後のツリーとして扱う
         if (isStep2ScoreExcluded(e.target)) return; // Step2ノードを非表示にしている場合は除外後のツリーとして扱う
+        if (isIndustryScoreExcluded(e)) return; // 業種を除外している場合は除外後のツリーとして扱う
         const v = parseFloat(e.change_pct);
         if (!isFinite(v)) return;
         if (!plGroups.has(t.industry)) plGroups.set(t.industry, []);
@@ -2039,6 +2059,7 @@ function setStraightenOn(on) {
       if (isRedundantEdge(id, e.target)) return; // 迂回路により非表示になっている直接エッジは無いものとして扱う
       if (isManuallyHiddenNode(scoreNodesById.get(e.target))) return; // 手動で非表示にしたノードは除外後のツリーとして扱う
       if (isStep2ScoreExcluded(e.target)) return; // Step2ノードを非表示にしている場合は除外後のツリーとして扱う
+      if (isIndustryScoreExcluded(e)) return; // 業種を除外している場合は除外後のツリーとして扱う
       const childRaw = computeExcludeBest(e.target, memo, excludedNodes);
       const weight = probabilityMode === 'edge'
         ? edgeProbabilityWeight(e)
@@ -2113,6 +2134,7 @@ function setStraightenOn(on) {
       if (isRedundantEdge(id, e.target)) return;
       if (isManuallyHiddenNode(t)) return;
       if (isStep2ScoreExcluded(e.target)) return;
+      if (isIndustryScoreExcluded(e)) return;
       const v = parseFloat(e.change_pct);
       if (!isFinite(v)) return;
       if (!byIndustry.has(t.industry)) byIndustry.set(t.industry, []);
@@ -2241,6 +2263,7 @@ function setStraightenOn(on) {
       if (e.source === e.target) return;
       if (isRedundantEdge(e.source, e.target)) return;
       if (!isHormuzReachable(e.source)) return;
+      if (isIndustryScoreExcluded(e)) return;
       const w = edgeProbabilityWeight(e);
       const existing = bySource.get(e.source);
       if (existing == null || w > existing) bySource.set(e.source, w);
@@ -3387,6 +3410,7 @@ function setStraightenOn(on) {
       if (isRedundantEdge(id, e.target)) return;
       if (isManuallyHiddenNode(t)) return;
       if (isStep2ScoreExcluded(e.target)) return;
+      if (isIndustryScoreExcluded(e)) return;
       const v = parseFloat(e.change_pct);
       if (!isFinite(v)) return;
       if (!byIndustry.has(t.industry)) byIndustry.set(t.industry, { vals: [] });
@@ -3833,6 +3857,7 @@ function setStraightenOn(on) {
         if (isRedundantEdge(id, e.target)) return;
         if (isManuallyHiddenNode(t)) return;
         if (isStep2ScoreExcluded(e.target)) return;
+        if (isIndustryScoreExcluded(e)) return;
         if (!best) best = e;
       });
       if (best) candidates.set(id, best);
@@ -4532,6 +4557,7 @@ function setStraightenOn(on) {
         if (isRedundantEdge(e.source, e.target)) return; // 迂回路により非表示になっている直接エッジは無いものとして扱う
         if (isManuallyHiddenNode(targetNode)) return; // 手動で非表示にしたノードは除外後のツリーとして扱う
         if (isStep2ScoreExcluded(e.target)) return; // Step2ノードを非表示にしている場合は除外後のツリーとして扱う
+        if (isIndustryScoreExcluded(e)) return; // 業種を除外している場合は除外後のツリーとして扱う
         reached.add(e.target);
         const pct = parsePct(e.change_pct);
         if (pct == null) return;
@@ -4804,6 +4830,7 @@ function setStraightenOn(on) {
         if (isRedundantEdge(e.source, e.target)) return; // 迂回路により非表示になっている直接エッジは無いものとして扱う
         if (isManuallyHiddenNode(t)) return; // 手動で非表示にしたノードは除外後のツリーとして扱う
         if (isStep2ScoreExcluded(e.target)) return; // Step2ノードを非表示にしている場合は除外後のツリーとして扱う
+        if (isIndustryScoreExcluded(e)) return; // 業種を除外している場合は除外後のツリーとして扱う
         const key = t.industry + '|' + e.source;
         reached.add(key);
         if (!sourceSign.has(e.source)) sourceSign.set(e.source, { pos: false, neg: false });
@@ -4950,6 +4977,7 @@ function setStraightenOn(on) {
       if (isRedundantEdge(e.source, e.target)) return;
       if (isManuallyHiddenNode(t)) return;
       if (isStep2ScoreExcluded(e.target)) return;
+      if (isIndustryScoreExcluded(e)) return;
       if (!e.company) return;
       if (!industryCompanies.has(t.industry)) industryCompanies.set(t.industry, new Set());
       industryCompanies.get(t.industry).add(e.company);
