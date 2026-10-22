@@ -1413,7 +1413,16 @@ function setStraightenOn(on) {
     compNodes.get(r).push(n.id);
   });
 
-  const industries = Array.from(new Set(edges.map(e => e.industry))).sort((a, b) => a.localeCompare(b, 'ja'));
+  // 「業種で絞り込み」「業種を除外」の対象業種は、実在企業の有報から実際に抽出された
+  // エッジを1件以上持つ業種だけに絞る。「全般」や、みずほマンスリーレポート・
+  // 三菱UFJリサーチ&コンサルティング・大和総研・OPEC月報・IEA Oil Market Report・
+  // 経済産業省資源エネルギー庁・AI推測など、特定企業の有報ではなくマクロ経済レポート
+  // 由来で業種タグだけ便宜的に付与されているものは対象外にする。
+  const MACRO_REPORT_INDUSTRY_NAMES = new Set(['OPEC月報', 'IEA Oil Market Report', '経済産業省資源エネルギー庁']);
+  function isRealCompanyIndustryEdge(e) {
+    return e.industry !== '全般' && isRealCompany(e.company) && !MACRO_REPORT_INDUSTRY_NAMES.has((e.company || '').trim());
+  }
+  const industries = Array.from(new Set(edges.filter(isRealCompanyIndustryEdge).map(e => e.industry))).sort((a, b) => a.localeCompare(b, 'ja'));
   const activeIndustries = new Set();
   // 「業種で絞り込み」（選択した業種だけを表示）とは別に、「選択した業種だけを除外」
   // するための独立したフィルター。両方同時に使うこともできる（絞り込みで残った中から、
