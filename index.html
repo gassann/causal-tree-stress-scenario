@@ -4644,11 +4644,9 @@ function setStraightenOn(on) {
     const colTds = new Map(heatLabels.map(l => [l, []])); // label -> [td, ...]（列の非表示切り替え用）
     const colNodeIds = new Map(heatLabels.map(l => [l, []])); // label -> [nodeId, ...]（列にデータがあるか判定用）
     const rowTrByIndustry = new Map(); // industry -> tr（行の非表示切り替え用）
-    const rowNodeIds = new Map(); // industry -> [nodeId, ...]（行にデータがあるか判定用）
     heatIndustries.forEach(ind => {
       const tr = document.createElement('tr');
       rowTrByIndustry.set(ind, tr);
-      rowNodeIds.set(ind, []);
       const rowTh = document.createElement('th');
       rowTh.className = 'pl-heatmap-row-head';
       const swatchColor = heatIndustryColor.get(ind) || 'var(--line-strong)';
@@ -4658,7 +4656,7 @@ function setStraightenOn(on) {
         const td = document.createElement('td');
         td.className = 'pl-heatmap-cell';
         const nodeId = cellNodeId.get(ind + '|' + label);
-        if (nodeId) { cellEls.set(nodeId, td); colNodeIds.get(label).push(nodeId); rowNodeIds.get(ind).push(nodeId); }
+        if (nodeId) { cellEls.set(nodeId, td); colNodeIds.get(label).push(nodeId); }
         else td.classList.add('is-na');
         colTds.get(label).push(td);
         tr.appendChild(td);
@@ -4713,11 +4711,11 @@ function setStraightenOn(on) {
         colHeaderTh.get(label).classList.toggle('is-hidden-col', !hasData || forceHide);
         colTds.get(label).forEach(td => td.classList.toggle('is-hidden-col', !hasData || forceHide));
       });
-      // 表示中の範囲から辿り着くPLノードが1つも無い行（＝業種を除外している、または
-      // そもそも関係の無い業種）も列と同じ基準で非表示にする。
+      // 業種を除外タブで除外している行だけを非表示にする。有報を取得した業種は、
+      // 表示中の範囲にネガティブな直接データが無い場合でも「数値記載なし」の行として残す
+      // （今回有報を取得した業種は、除外しない限り必ず一覧に出す）。
       heatIndustries.forEach(ind => {
-        const hasData = rowNodeIds.get(ind).some(nodeId => reached.has(nodeId));
-        rowTrByIndustry.get(ind).classList.toggle('is-hidden-row', !hasData);
+        rowTrByIndustry.get(ind).classList.toggle('is-hidden-row', excludedIndustries.has(ind));
       });
       caption.textContent = isHover
         ? `「${baseNodesById.get(focusId).label}」から辿れるPL項目のみ表示（ネガティブな変動率の平均）`
@@ -4764,6 +4762,10 @@ function setStraightenOn(on) {
     // クリックハンドラから呼ばれるrefreshCauseHeatmapとして公開する。選択中のタグ
     // （売上／営業利益／その他）はbuild()の外で保持し、作り直しても引き継ぐ。
     let activeTag = 'sales';
+    // 今回有報を取得した業種一覧（モジュール先頭で定義した「業種で絞り込み」「業種を除外」
+    // タグと同じ6業種）。build()内では同名のローカル変数industriesを別途定義するため、
+    // build()の外でこの名前に退避しておく。
+    const realYuhoIndustries = industries;
 
     function build() {
       wrap.innerHTML = '';
@@ -4942,6 +4944,11 @@ function setStraightenOn(on) {
         Object.keys(orderStatsByTag).some(tagKey => orderStatsByTag[tagKey].reached.has(ind + '|' + sid))
       );
       if (!hasColumn) industriesSet.delete(ind);
+    });
+    // 今回有報を取得した業種（業種を除外タブで除外していないもの）は、ホルムズ海峡封鎖
+    // から辿れるネガティブな直接データが無い場合でも、データなしの行として必ず表示する。
+    realYuhoIndustries.forEach(ind => {
+      if (!excludedIndustries.has(ind)) industriesSet.add(ind);
     });
 
     if (industriesSet.size === 0 || sourcesMap.size === 0) {
