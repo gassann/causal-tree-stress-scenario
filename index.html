@@ -817,13 +817,13 @@
 
       <section class="tag-section">
         <h3 class="tag-section-title">表示・絞り込み<span class="tag-section-note">ツリー構造やスコアは変わりません</span></h3>
-        <div class="filter-row" id="filterRow"></div>
         <div class="filter-row" id="displayRow"></div>
         <div class="filter-row" id="regionFilterRow"></div>
       </section>
 
       <section class="tag-section tag-section-structure">
         <h3 class="tag-section-title">ツリー構造を変えるタグ<span class="tag-section-note">シナリオ計算にも反映されます</span></h3>
+        <div class="filter-row" id="filterRow"></div>
         <div class="filter-row" id="industryExcludeRow"></div>
         <div class="filter-row" id="industryWeightRow"></div>
         <div class="filter-row" id="structureMiscRow"></div>
@@ -1518,8 +1518,9 @@ function setStraightenOn(on) {
   const activeIndustries = new Set();
   // 「業種で絞り込み」（選択した業種だけを表示）とは別に、「選択した業種だけを除外」
   // するための独立したフィルター。両方同時に使うこともできる（絞り込みで残った中から、
-  // さらに除外業種を取り除く）。「ツリー構造を変えるタグ」として扱うため、表示だけで
-  // なくスコア計算・シナリオ算出にも反映する（isIndustryScoreExcluded）。
+  // さらに除外業種を取り除く）。どちらも「ツリー構造を変えるタグ」として扱うため、
+  // 表示だけでなくスコア計算・シナリオ算出にも反映する（isIndustryScoreExcluded、
+  // 実体はどちらも下のindustryPassesを参照）。
   // デフォルトで不動産業を除外しておく（ユーザー指定）。
   const excludedIndustries = new Set(industries.includes('不動産業') ? ['不動産業'] : []);
   // エッジ単位の判定（表示フィルター用）。applyVisibility()・showIsolationFocus()の
@@ -1584,7 +1585,7 @@ function setStraightenOn(on) {
       if (isRedundantEdge(id, e.target)) return; // 迂回路により非表示になっている直接エッジは無いものとして扱う
       if (isManuallyHiddenNode(t)) return; // 手動で非表示にしたノードは除外後のツリーとして扱う
       if (isStep2ScoreExcluded(e.target)) return; // Step2ノードを非表示にしている場合は除外後のツリーとして扱う
-      if (isIndustryScoreExcluded(e)) return; // 業種を除外している場合は除外後のツリーとして扱う
+      if (isIndustryPlExcluded(e)) return; // 業種を除外／業種で絞り込みしている場合は除外後のツリーとして扱う
       if (!edgesByIndustry.has(t.industry)) edgesByIndustry.set(t.industry, []);
       edgesByIndustry.get(t.industry).push(e);
     });
@@ -1731,6 +1732,9 @@ function setStraightenOn(on) {
   document.getElementById('pairCount').textContent = `(${pairRoots.length}件)`;
 
   // ---- filter chips ----
+  // 「業種で絞り込み」は表示だけでなくスコア計算・シナリオ算出にも反映する（isIndustryScoreExcluded
+  // がindustryPassesを参照するため）。「ツリー構造を変えるタグ」として扱い、
+  // refreshAfterStructureChange()（宣言はこれより後ろ）でスコア側も再計算する。
   const filterRow = document.getElementById('filterRow');
   const label = document.createElement('span');
   label.className = 'filter-label';
@@ -1744,8 +1748,7 @@ function setStraightenOn(on) {
     activeIndustries.clear();
     document.querySelectorAll('.chip[data-industry]').forEach(c => c.classList.remove('active'));
     resetChip.classList.add('active');
-    applyVisibility();
-    refreshIsolationIfOpen();
+    refreshAfterStructureChange();
   });
   filterRow.appendChild(resetChip);
 
@@ -1754,6 +1757,7 @@ function setStraightenOn(on) {
     chip.className = 'chip';
     chip.dataset.industry = ind;
     chip.textContent = ind;
+    chip.title = `「${ind}」が報告した因果関係（エッジ）のみに絞り込みます。スコア計算・シナリオ算出にも反映されます。`;
     chip.addEventListener('click', () => {
       if (activeIndustries.has(ind)) {
         activeIndustries.delete(ind);
@@ -1763,8 +1767,7 @@ function setStraightenOn(on) {
         chip.classList.add('active');
       }
       resetChip.classList.toggle('active', activeIndustries.size === 0);
-      applyVisibility();
-      refreshIsolationIfOpen();
+      refreshAfterStructureChange();
     });
     filterRow.appendChild(chip);
   });
@@ -1772,10 +1775,10 @@ function setStraightenOn(on) {
   // ---- display mode: collapse all / expand all ----
   // タグは効く段階ごとに行・セクションを分けている（HTML側は control-panel 内の
   // .tag-section を参照）:
-  // ・displayRow/filterRow/regionFilterRow:「表示・絞り込み」
+  // ・displayRow/regionFilterRow:「表示・絞り込み」
   //   セクション。表示の絞り込み・ナビゲーションのみ（ツリー構造もシナリオ計算も変えない）
   // ・scoreModeRow/scenarioRow:「スコア・シナリオ計算」セクション
-  // ・industryExcludeRow/industryWeightRow/structureMiscRow:「ツリー構造を変えるタグ」
+  // ・filterRow/industryExcludeRow/industryWeightRow/structureMiscRow:「ツリー構造を変えるタグ」
   //   セクション。ツリーの構造そのものを決め、シナリオ計算にも反映される
   // ・postFixRow: ツリー構造が確定した後に、それとは独立に適用される後処理
   //   （まとめて表示は見た目の統合、シナリオ計算はスコアリング。互いに影響し合わない）
@@ -1787,7 +1790,7 @@ function setStraightenOn(on) {
   displayLabel.title = '絞り込み・ナビゲーション。ツリー構造やスコアは変わりません。';
   displayRow.appendChild(displayLabel);
 
-  // 「ツリー構造を変えるタグ」セクションは3本の個別の行に分けている
+  // 「ツリー構造を変えるタグ」セクションはfilterRowの他に3本の個別の行に分けている
   // （industryExcludeRow／industryWeightRow／structureMiscRow）。元は1本のfilter-rowに
   // 全部詰め込んでいたが、タグが増えるにつれ折り返しだらけで読みづらくなったため分割した。
   const industryExcludeRow = document.getElementById('industryExcludeRow');
@@ -2070,9 +2073,17 @@ function setStraightenOn(on) {
     const n = scoreNodesById.get(id);
     return !!n && !!n.isNew;
   }
-  // 「業種を除外」も同じ理由でシナリオ計算に反映する。excludedIndustriesの宣言は
-  // これより前（industries/activeIndustriesの近く）にある。
+  // 「業種を除外」も同じ理由でシナリオ計算に反映する。中間の因果連鎖（ホルムズ海峡封鎖→
+  // 原油価格の高騰→...のような、業種を問わず共通して辿るマクロ的な経路）の通過判定には、
+  // ここでは「業種を除外」の除外リストだけを見る。「業種で絞り込み」（activeIndustries）
+  // はここには含めない。中間ノードの多くは複数業種のエッジを共有しているため、単一業種への
+  // 絞り込みを経路の全エッジに課すと、トランク部分で経路が途切れて実質スコアが出なくなって
+  // しまう。「業種で絞り込み」の効果はPL直結エッジの集計（isIndustryPlExcluded、
+  // plContributionsByIndusty等）にのみ反映する。
   function isIndustryScoreExcluded(e) { return excludedIndustries.has(e.industry); }
+  // PL/BS勘定科目への直接エッジ（その業種の最終的な業績影響そのもの）に対しては、
+  // 「業種を除外」に加えて「業種で絞り込み」（選択した業種以外を除外）も反映する。
+  function isIndustryPlExcluded(e) { return !industryPasses(e); }
   function zoneScoreOf(impact, probability) {
     const sum = impact + probability;
     if (sum <= 3) return 1;
@@ -3975,7 +3986,7 @@ function setStraightenOn(on) {
         if (isRedundantEdge(id, e.target)) return;
         if (isManuallyHiddenNode(t)) return;
         if (isStep2ScoreExcluded(e.target)) return;
-        if (isIndustryScoreExcluded(e)) return;
+        if (isIndustryPlExcluded(e)) return;
         if (!best) best = e;
       });
       if (best) candidates.set(id, best);
@@ -4671,7 +4682,7 @@ function setStraightenOn(on) {
         if (isRedundantEdge(e.source, e.target)) return; // 迂回路により非表示になっている直接エッジは無いものとして扱う
         if (isManuallyHiddenNode(targetNode)) return; // 手動で非表示にしたノードは除外後のツリーとして扱う
         if (isStep2ScoreExcluded(e.target)) return; // Step2ノードを非表示にしている場合は除外後のツリーとして扱う
-        if (isIndustryScoreExcluded(e)) return; // 業種を除外している場合は除外後のツリーとして扱う
+        if (isIndustryPlExcluded(e)) return; // 業種を除外／業種で絞り込みしている場合は除外後のツリーとして扱う
         reached.add(e.target);
         const pct = parsePct(e.change_pct);
         if (pct == null) return;
@@ -4956,7 +4967,7 @@ function setStraightenOn(on) {
         if (isRedundantEdge(e.source, e.target)) return; // 迂回路により非表示になっている直接エッジは無いものとして扱う
         if (isManuallyHiddenNode(t)) return; // 手動で非表示にしたノードは除外後のツリーとして扱う
         if (isStep2ScoreExcluded(e.target)) return; // Step2ノードを非表示にしている場合は除外後のツリーとして扱う
-        if (isIndustryScoreExcluded(e)) return; // 業種を除外している場合は除外後のツリーとして扱う
+        if (isIndustryPlExcluded(e)) return; // 業種を除外／業種で絞り込みしている場合は除外後のツリーとして扱う
         const key = t.industry + '|' + e.source;
         reached.add(key);
         if (!sourceSign.has(e.source)) sourceSign.set(e.source, { pos: false, neg: false });
@@ -5134,7 +5145,7 @@ function setStraightenOn(on) {
       if (isRedundantEdge(e.source, e.target)) return;
       if (isManuallyHiddenNode(t)) return;
       if (isStep2ScoreExcluded(e.target)) return;
-      if (isIndustryScoreExcluded(e)) return;
+      if (isIndustryPlExcluded(e)) return;
       if (!e.company) return;
       if (!industryCompanies.has(t.industry)) industryCompanies.set(t.industry, new Set());
       industryCompanies.get(t.industry).add(e.company);
