@@ -818,7 +818,6 @@
       <section class="tag-section">
         <h3 class="tag-section-title">表示・絞り込み<span class="tag-section-note">ツリー構造やスコアは変わりません</span></h3>
         <div class="filter-row" id="displayRow"></div>
-        <div class="filter-row" id="regionFilterRow"></div>
       </section>
 
       <section class="tag-section tag-section-structure">
@@ -1456,35 +1455,6 @@ function setStraightenOn(on) {
     scoredIds.add(id);
   });
 
-  // ---- 地域関連ノードのみ表示（地域タグは ホルムズ海峡封鎖_ノード分類.csv の「地域」列を
-  // (ラベル,業種) で突き合わせて付与。タグ付けされたノード自身に加え、そこに至る上流の
-  // 原因チェーン（祖先）と、そこから先の下流の影響（子孫）を全て残す。祖先探索・子孫探索は
-  // 混ぜずに別々のBFSで行う（混ぜると無関係な兄弟枝まで巻き込んでしまうため）。 ----
-  const REGION_ORDER = ['日本', 'アジア', '中東', '欧州', 'インド', 'アジア・アフリカ'];
-  const regionValues = REGION_ORDER.filter(v => DATA_BASE.nodes.some(n => n.region === v));
-  const nodesByRegion = new Map(regionValues.map(v => [v, DATA_BASE.nodes.filter(n => n.region === v).map(n => n.id)]));
-  function computeRegionKeepSet(regionValue) {
-    const seeds = regionValue
-      ? (nodesByRegion.get(regionValue) || [])
-      : DATA_BASE.nodes.filter(n => n.region).map(n => n.id);
-    const keep = new Set(seeds);
-    let queue = [...seeds], qi = 0;
-    while (qi < queue.length) {
-      const id = queue[qi++];
-      (baseInAdj.get(id) || []).forEach(e => { if (!keep.has(e.source)) { keep.add(e.source); queue.push(e.source); } });
-    }
-    queue = [...seeds]; qi = 0;
-    while (qi < queue.length) {
-      const id = queue[qi++];
-      (baseOutAdj.get(id) || []).forEach(e => { if (!keep.has(e.target)) { keep.add(e.target); queue.push(e.target); } });
-    }
-    return keep;
-  }
-  let regionFilterOn = false;
-  let regionFilterValue = null; // null = 全地域まとめて
-  let regionKeepSet = null;
-  function regionPasses(id) { return !regionFilterOn || (regionKeepSet && regionKeepSet.has(id)); }
-
   // ---- union-find for components ----
   const parent = new Map();
   DATA.nodes.forEach(n => parent.set(n.id, n.id));
@@ -1775,7 +1745,7 @@ function setStraightenOn(on) {
   // ---- display mode: collapse all / expand all ----
   // タグは効く段階ごとに行・セクションを分けている（HTML側は control-panel 内の
   // .tag-section を参照）:
-  // ・displayRow/regionFilterRow:「表示・絞り込み」
+  // ・displayRow:「表示・絞り込み」
   //   セクション。表示の絞り込み・ナビゲーションのみ（ツリー構造もシナリオ計算も変えない）
   // ・scoreModeRow/scenarioRow:「スコア・シナリオ計算」セクション
   // ・filterRow/industryExcludeRow/industryWeightRow/structureMiscRow:「ツリー構造を変えるタグ」
@@ -2636,18 +2606,6 @@ function setStraightenOn(on) {
   });
   visualStyleRow.appendChild(step2ColorChip);
 
-  // ---- 影響ヒートマップの簡略化表示 ----
-  const plHeatmapSimplifyChip = document.createElement('span');
-  plHeatmapSimplifyChip.className = 'chip';
-  plHeatmapSimplifyChip.textContent = '影響ヒートマップを簡略化して表示';
-  plHeatmapSimplifyChip.title = 'オンにすると、業種×PL項目 影響ヒートマップから「売上総利益率の悪化」「連結営業利益減少」「地域営業利益減少」の列を非表示にします（ツリー本体には影響しません）。';
-  plHeatmapSimplifyChip.addEventListener('click', () => {
-    plHeatmapSimplify = !plHeatmapSimplify;
-    plHeatmapSimplifyChip.classList.toggle('active', plHeatmapSimplify);
-    refreshPlHeatmapSimplify();
-  });
-  visualStyleRow.appendChild(plHeatmapSimplifyChip);
-
   // ---- ノードを手動で非表示にする ----
   const manualHideChip = document.createElement('span');
   manualHideChip.className = 'chip';
@@ -2789,56 +2747,6 @@ function setStraightenOn(on) {
     mergeViewChip.title = '「ホルムズ海峡封鎖」から辿れる範囲で、枝分かれの無い一本道（親が1つだけ・かつその親から見て子はこのノードだけ、または子が1つだけ・かつその子から見て親はこのノードだけ）を、見た目上だけ1つのノードにまとめて表示します。因果データベース自体は変更されません。切り替えるとページを再読み込みします。';
     mergeViewChip.addEventListener('click', () => setMergeViewOn(!isMergeViewOn()));
     postFixRow.appendChild(mergeViewChip);
-  }
-
-  // ---- 地域関連ノードのみ表示 ----
-  const regionFilterRow = document.getElementById('regionFilterRow');
-  function renderRegionFilterRow() {
-    regionFilterRow.innerHTML = '';
-    if (!regionFilterOn) return;
-    const label = document.createElement('span');
-    label.className = 'filter-label';
-    label.textContent = '地域で絞り込み';
-    regionFilterRow.appendChild(label);
-    const allChip = document.createElement('span');
-    allChip.className = 'chip' + (regionFilterValue === null ? ' active' : '');
-    allChip.textContent = '全地域';
-    allChip.addEventListener('click', () => {
-      regionFilterValue = null;
-      regionKeepSet = computeRegionKeepSet(regionFilterValue);
-      renderRegionFilterRow();
-      applyVisibility();
-      refreshIsolationIfOpen();
-    });
-    regionFilterRow.appendChild(allChip);
-    regionValues.forEach(v => {
-      const chip = document.createElement('span');
-      chip.className = 'chip' + (regionFilterValue === v ? ' active' : '');
-      chip.textContent = v;
-      chip.addEventListener('click', () => {
-        regionFilterValue = v;
-        regionKeepSet = computeRegionKeepSet(regionFilterValue);
-        renderRegionFilterRow();
-        applyVisibility();
-        refreshIsolationIfOpen();
-      });
-      regionFilterRow.appendChild(chip);
-    });
-  }
-  if (regionValues.length > 0) {
-    const regionToggleChip = document.createElement('span');
-    regionToggleChip.className = 'chip';
-    regionToggleChip.textContent = '地域関連ノードのみ表示';
-    regionToggleChip.title = 'オンにすると、地域が判明している影響ノード（例: 欧州・アジア・インド等）につながるノードだけを表示します（そこに至る上流の原因チェーンと、そこから先の下流の影響を含む）。オンの間はさらに個別の地域で絞り込めます。';
-    regionToggleChip.addEventListener('click', () => {
-      regionFilterOn = !regionFilterOn;
-      regionToggleChip.classList.toggle('active', regionFilterOn);
-      regionKeepSet = regionFilterOn ? computeRegionKeepSet(regionFilterValue) : null;
-      renderRegionFilterRow();
-      applyVisibility();
-      refreshIsolationIfOpen();
-    });
-    displayRow.appendChild(regionToggleChip);
   }
 
   const scoreModeRow = document.getElementById('scoreModeRow');
@@ -4476,7 +4384,7 @@ function setStraightenOn(on) {
     // この絞り込みを適用しても「深い階層のノードが切り捨てられる」ことはない。ここで
     // 本当に消えるのは、辿っても実在企業の影響に一切繋がらない枝だけなので、起点にした
     // ツリー表示でも引き続き適用する。
-    const isoNodeIds = Array.from(isoSet).filter(id => id === focusId || (industryNodePasses(id) && (!hideNoImpactNodes || companyImpactKeepSet.has(id)) && positivePlPasses(id) && regionPasses(id) && step2NodePasses(id) && scenarioNodePasses(id) && manualHidePasses(id)));
+    const isoNodeIds = Array.from(isoSet).filter(id => id === focusId || (industryNodePasses(id) && (!hideNoImpactNodes || companyImpactKeepSet.has(id)) && positivePlPasses(id) && step2NodePasses(id) && scenarioNodePasses(id) && manualHidePasses(id)));
     const keptSet = new Set(isoNodeIds);
     const isoEdges = edges.filter(e => keptSet.has(e.source) && keptSet.has(e.target) && e.source !== e.target && industryPasses(e));
     const svg = renderGraphSvg(isoNodeIds, isoEdges, { idSeq: 'iso', registerGlobal: false, responsive: true, focusId });
@@ -4567,7 +4475,6 @@ function setStraightenOn(on) {
       return visibleByCollapse.has(e.source) && visibleByCollapse.has(e.target) && industryPasses(e) &&
         impactPasses(e.source) && impactPasses(e.target) &&
         positivePlPasses(e.source) && positivePlPasses(e.target) &&
-        regionPasses(e.source) && regionPasses(e.target) &&
         step2NodePasses(e.source) && step2NodePasses(e.target) &&
         scenarioNodePasses(e.source) && scenarioNodePasses(e.target) &&
         manualHidePasses(e.source) && manualHidePasses(e.target);
@@ -4584,7 +4491,7 @@ function setStraightenOn(on) {
     // collapse state hides its children, not itself, so a root whose only edge gets hidden by
     // its own collapse must stay visible.
     nodeDom.forEach(({ g, node }) => {
-      const shown = visibleByCollapse.has(node.id) && industryNodePasses(node.id) && impactPasses(node.id) && positivePlPasses(node.id) && regionPasses(node.id) && step2NodePasses(node.id) && scenarioNodePasses(node.id) && manualHidePasses(node.id);
+      const shown = visibleByCollapse.has(node.id) && industryNodePasses(node.id) && impactPasses(node.id) && positivePlPasses(node.id) && step2NodePasses(node.id) && scenarioNodePasses(node.id) && manualHidePasses(node.id);
       g.classList.toggle('is-hidden', !shown);
     });
 
@@ -4609,8 +4516,6 @@ function setStraightenOn(on) {
   // 到達可能な）ノードを起点に持つ直接エッジだけに絞り込む。ホバーしていない初期状態では
   // 全データからの平均を表示する。
   let updatePlHeatmap = function () {}; // ノードのclickから呼ばれる（renderGraphSvg定義より前で使われるため関数式で先に宣言）
-  let refreshPlHeatmapSimplify = function () {}; // 「簡略化して表示」チップから呼ばれる（同上の理由で先に宣言）
-  let plHeatmapSimplify = false;
   // 迂回路非表示・手動非表示・Step2非表示のトグルはいずれもisRedundantEdge/
   // isManuallyHiddenNode/isStep2ScoreExcludedの判定結果を変えるため、それらに依存する
   // 2つのヒートマップ（業種×PL項目／業種×最終手前ノード）も作り直す必要がある。
@@ -4659,14 +4564,6 @@ function setStraightenOn(on) {
     // ヒートマップは「PLノードを非表示」タグの状態に関わらず常に表示したいため、
     // ツリー描画用のフィルタ済み DATA/nodesById/edges には依存せず、PLノードを含む
     // 完全なデータ（DATA_BASE、baseNodesById/baseOutAdj）から独立して構築する。
-
-    // 「簡略化して表示」タグがオンの間、追加で非表示にする列（一般的な科目の中でも
-    // 特に細かく・重複感のあるもの、および特定事業名を含むもの）。
-    const PL_HEATMAP_SIMPLIFY_HIDE = new Set([
-      '売上総利益率の悪化', '連結営業利益減少', '地域営業利益減少',
-      '熱供給事業営業利益減少', '熱供給事業営業利益増加', '熱供給事業売上高増加',
-      '貨物運送関連営業収益減少', '貨物運送関連営業利益減少',
-    ]);
 
     const plNodeIds = DATA_BASE.nodes
       .filter(n => n.industry && n.industry !== '全般' && !isBsLabel(n.label))
@@ -4848,12 +4745,10 @@ function setStraightenOn(on) {
       });
       // 表示中の範囲から辿り着くPLノードが1つも無い列（＝関係の無い列）だけを非表示にする。
       // 辿り着きはするが増減率の数値が無いだけの場合は列を残し、「数値記載なし」セルで示す。
-      // 「簡略化して表示」がオンの間は、PL_HEATMAP_SIMPLIFY_HIDEに含まれる列も追加で隠す。
       heatLabels.forEach(label => {
         const hasData = colNodeIds.get(label).some(nodeId => reached.has(nodeId));
-        const forceHide = plHeatmapSimplify && PL_HEATMAP_SIMPLIFY_HIDE.has(label);
-        colHeaderTh.get(label).classList.toggle('is-hidden-col', !hasData || forceHide);
-        colTds.get(label).forEach(td => td.classList.toggle('is-hidden-col', !hasData || forceHide));
+        colHeaderTh.get(label).classList.toggle('is-hidden-col', !hasData);
+        colTds.get(label).forEach(td => td.classList.toggle('is-hidden-col', !hasData));
       });
       // 業種を除外タブで除外している行だけを非表示にする。有報を取得した業種は、
       // 表示中の範囲にネガティブな直接データが無い場合でも「数値記載なし」の行として残す
@@ -4874,9 +4769,6 @@ function setStraightenOn(on) {
       if (!hoverId) { paint(baselineResult, false); return; }
       const reachable = computeReachable(hoverId);
       paint(computeCellStats(reachable), true, hoverId);
-    };
-    refreshPlHeatmapSimplify = function () {
-      updatePlHeatmap(lastPlHeatmapFocusId);
     };
     refreshPlHeatmapFilters = function () {
       baselineResult = computeCellStats(defaultReachable);
