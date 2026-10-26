@@ -188,6 +188,52 @@
   .chip.disabled { opacity: .4; cursor: not-allowed; }
   .chip.disabled:hover { border-color: var(--line-strong); color: var(--ink-muted); }
 
+  /* タグが増えて見づらくなったため、役割ごとに.tag-sectionのカードへグループ化している。
+     「表示・絞り込み」「スコア・シナリオ計算」「ツリー構造を変えるタグ」「後処理・表示
+     スタイル」「凡例」の5カードに分け、中でも「ツリー構造を変えるタグ」（シナリオ計算
+     の結果そのものが変わる）はtag-section-structureで背景色を変えて目立たせている。 */
+  .tag-section {
+    display: flex; flex-direction: column; gap: 8px;
+    padding: 10px 14px 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface-alt);
+  }
+  .tag-section-structure {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+  .tag-section-title {
+    margin: 0; padding: 0;
+    font-family: "Zen Kaku Gothic New", sans-serif;
+    font-size: 13px; font-weight: 700; color: var(--ink);
+    display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  }
+  .tag-section-note {
+    font-size: 11px; font-weight: 400; color: var(--ink-muted);
+  }
+  .tag-section .filter-row:empty { display: none; }
+  .industry-weight-label {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: "Zen Kaku Gothic New", sans-serif;
+    font-size: 13px; color: var(--ink-muted);
+    padding: 4px 10px 4px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--line-strong);
+    background: var(--surface);
+  }
+  .industry-weight-input {
+    width: 42px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 12.5px;
+    border: 1px solid var(--line-strong);
+    border-radius: 5px;
+    padding: 2px 4px;
+    background: var(--surface-alt);
+    color: var(--ink);
+  }
+  .industry-weight-input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
   main {
     flex: 1;
     padding: 24px 28px 60px;
@@ -756,27 +802,51 @@
     </div>
     <div class="control-panel" id="controlPanel">
       <div class="stats" id="stats"></div>
-      <div class="filter-row" id="filterRow"></div>
-      <div class="filter-row" id="displayRow"></div>
-      <div class="filter-row" id="structureFilterRow"></div>
-      <div class="filter-row" id="revenueSplitRow"></div>
-      <div class="filter-row" id="colorModeRow"></div>
-      <div class="filter-row" id="regionFilterRow"></div>
-      <div class="filter-row" id="postFixRow"></div>
-      <div class="filter-row" id="visualStyleRow"></div>
-      <div class="filter-row legend-row" id="legendRow">
-        <span class="filter-label">エッジの種類</span>
-        <span class="legend-item"><span class="legend-swatch" style="background:var(--line-strong)"></span>抽出</span>
-        <span class="legend-item"><span class="legend-swatch legend-swatch-dashed"></span>AI推測</span>
-        <span class="legend-item" title="Step1（有報・デフォルトのマクロ経済レポート）で構築した因果ツリーに対し、人がシナリオと参照資料を選んで追加したノード・因果関係（Step2）。該当ノードは枠線もこの色になる"><span class="legend-swatch" style="background:var(--step2)"></span>Step2で追加</span>
-        <span class="filter-label" id="legendNodeSwatchesLabel" style="margin-left:14px;">ノード枠線の色（業種別）</span>
-        <span id="legendNodeSwatches"></span>
-        <span class="filter-label" style="margin-left:14px;">影響度／蓋然性（試験版）</span>
-        <span class="legend-item">
-          <span class="level-legend-swatch" id="legendLevelSwatch"></span>
-          <span style="margin-left:4px;">付与済みノードにマウスオーバーすると表示（1〜4、数字が大きいほど高い）</span>
-        </span>
-      </div>
+
+      <section class="tag-section">
+        <h3 class="tag-section-title">表示・絞り込み<span class="tag-section-note">ツリー構造やスコアは変わりません</span></h3>
+        <div class="filter-row" id="filterRow"></div>
+        <div class="filter-row" id="displayRow"></div>
+        <div class="filter-row" id="regionFilterRow"></div>
+        <div class="filter-row" id="revenueSplitRow"></div>
+        <div class="filter-row" id="colorModeRow"></div>
+      </section>
+
+      <section class="tag-section">
+        <h3 class="tag-section-title">スコア・シナリオ計算</h3>
+        <div class="filter-row" id="scoreModeRow"></div>
+        <div class="filter-row scenario-controls" id="scenarioRow"></div>
+      </section>
+
+      <section class="tag-section tag-section-structure">
+        <h3 class="tag-section-title">ツリー構造を変えるタグ<span class="tag-section-note">シナリオ計算にも反映されます</span></h3>
+        <div class="filter-row" id="industryExcludeRow"></div>
+        <div class="filter-row" id="industryWeightRow"></div>
+        <div class="filter-row" id="structureMiscRow"></div>
+      </section>
+
+      <section class="tag-section">
+        <h3 class="tag-section-title">後処理・表示スタイル<span class="tag-section-note">見た目のみ。計算には影響しません</span></h3>
+        <div class="filter-row" id="postFixRow"></div>
+        <div class="filter-row" id="visualStyleRow"></div>
+      </section>
+
+      <section class="tag-section">
+        <h3 class="tag-section-title">凡例</h3>
+        <div class="filter-row legend-row" id="legendRow">
+          <span class="filter-label">エッジの種類</span>
+          <span class="legend-item"><span class="legend-swatch" style="background:var(--line-strong)"></span>抽出</span>
+          <span class="legend-item"><span class="legend-swatch legend-swatch-dashed"></span>AI推測</span>
+          <span class="legend-item" title="Step1（有報・デフォルトのマクロ経済レポート）で構築した因果ツリーに対し、人がシナリオと参照資料を選んで追加したノード・因果関係（Step2）。該当ノードは枠線もこの色になる"><span class="legend-swatch" style="background:var(--step2)"></span>Step2で追加</span>
+          <span class="filter-label" id="legendNodeSwatchesLabel" style="margin-left:14px;">ノード枠線の色（業種別）</span>
+          <span id="legendNodeSwatches"></span>
+          <span class="filter-label" style="margin-left:14px;">影響度／蓋然性（試験版）</span>
+          <span class="legend-item">
+            <span class="level-legend-swatch" id="legendLevelSwatch"></span>
+            <span style="margin-left:4px;">付与済みノードにマウスオーバーすると表示（1〜4、数字が大きいほど高い）</span>
+          </span>
+        </div>
+      </section>
     </div>
   </header>
 
@@ -1737,23 +1807,29 @@ function setStraightenOn(on) {
   });
 
   // ---- display mode: collapse all / expand all ----
-  // タグは効く段階ごとに行を分けている:
-  // ・displayRow: 表示の絞り込み・ナビゲーション（ツリー構造もシナリオ計算も変えない）
-  // ・structureFilterRow: ツリーの構造そのものを決めるタグ（シナリオ計算にも反映される）
+  // タグは効く段階ごとに行・セクションを分けている（HTML側は control-panel 内の
+  // .tag-section を参照）:
+  // ・displayRow/filterRow/regionFilterRow/revenueSplitRow/colorModeRow:「表示・絞り込み」
+  //   セクション。表示の絞り込み・ナビゲーションのみ（ツリー構造もシナリオ計算も変えない）
+  // ・scoreModeRow/scenarioRow:「スコア・シナリオ計算」セクション
+  // ・industryExcludeRow/industryWeightRow/structureMiscRow:「ツリー構造を変えるタグ」
+  //   セクション。ツリーの構造そのものを決め、シナリオ計算にも反映される
   // ・postFixRow: ツリー構造が確定した後に、それとは独立に適用される後処理
   //   （まとめて表示は見た目の統合、シナリオ計算はスコアリング。互いに影響し合わない）
   // ・visualStyleRow: レイアウト・線の描き方など純粋に見た目だけのタグ
   const displayRow = document.getElementById('displayRow');
   const displayLabel = document.createElement('span');
   displayLabel.className = 'filter-label';
-  displayLabel.textContent = '表示モード（絞り込み・ナビゲーション）';
+  displayLabel.textContent = '表示モード';
+  displayLabel.title = '絞り込み・ナビゲーション。ツリー構造やスコアは変わりません。';
   displayRow.appendChild(displayLabel);
 
-  const structureFilterRow = document.getElementById('structureFilterRow');
-  const structureFilterLabel = document.createElement('span');
-  structureFilterLabel.className = 'filter-label';
-  structureFilterLabel.textContent = 'ツリー構造を変えるタグ（シナリオ計算にも反映されます）';
-  structureFilterRow.appendChild(structureFilterLabel);
+  // 「ツリー構造を変えるタグ」セクションは3本の個別の行に分けている
+  // （industryExcludeRow／industryWeightRow／structureMiscRow）。元は1本のfilter-rowに
+  // 全部詰め込んでいたが、タグが増えるにつれ折り返しだらけで読みづらくなったため分割した。
+  const industryExcludeRow = document.getElementById('industryExcludeRow');
+  const industryWeightRow = document.getElementById('industryWeightRow');
+  const structureMiscRow = document.getElementById('structureMiscRow');
 
   // ---- 業種を除外 ----
   // 選択した業種（エッジのe.industry＝原因・結果を報告した会社の業種）を、表示だけで
@@ -1763,8 +1839,7 @@ function setStraightenOn(on) {
   const industryExcludeLabel = document.createElement('span');
   industryExcludeLabel.className = 'filter-label';
   industryExcludeLabel.textContent = '業種を除外';
-  industryExcludeLabel.style.marginLeft = '14px';
-  structureFilterRow.appendChild(industryExcludeLabel);
+  industryExcludeRow.appendChild(industryExcludeLabel);
 
   function refreshAfterStructureChange() {
     applyVisibility();
@@ -1786,7 +1861,7 @@ function setStraightenOn(on) {
     excludeIndustryResetChip.classList.add('active');
     refreshAfterStructureChange();
   });
-  structureFilterRow.appendChild(excludeIndustryResetChip);
+  industryExcludeRow.appendChild(excludeIndustryResetChip);
 
   industries.forEach(ind => {
     const chip = document.createElement('span');
@@ -1805,7 +1880,7 @@ function setStraightenOn(on) {
       excludeIndustryResetChip.classList.toggle('active', excludedIndustries.size === 0);
       refreshAfterStructureChange();
     });
-    structureFilterRow.appendChild(chip);
+    industryExcludeRow.appendChild(chip);
   });
 
   // ---- 業種ごとの重み ----
@@ -1814,9 +1889,9 @@ function setStraightenOn(on) {
   // のweight（industryWeights、宣言はこのファイル上部）。
   const industryWeightLabel = document.createElement('span');
   industryWeightLabel.className = 'filter-label';
-  industryWeightLabel.textContent = '業種ごとの重み（PL合計を業種間で合算する際の係数）';
-  industryWeightLabel.style.marginLeft = '14px';
-  structureFilterRow.appendChild(industryWeightLabel);
+  industryWeightLabel.textContent = '業種ごとの重み';
+  industryWeightLabel.title = 'PL合計を業種間で合算する際、各業種の寄与に掛ける係数（デフォルト1＝単純合計）。';
+  industryWeightRow.appendChild(industryWeightLabel);
 
   const industryWeightResetChip = document.createElement('span');
   industryWeightResetChip.className = 'chip reset';
@@ -1824,22 +1899,22 @@ function setStraightenOn(on) {
   industryWeightResetChip.title = '全業種の重みを1（単純合計）に戻します。';
   industryWeightResetChip.addEventListener('click', () => {
     industryWeights.clear();
-    structureFilterRow.querySelectorAll('.industry-weight-input').forEach(inp => { inp.value = '1'; });
+    industryWeightRow.querySelectorAll('.industry-weight-input').forEach(inp => { inp.value = '1'; });
     refreshAfterStructureChange();
   });
-  structureFilterRow.appendChild(industryWeightResetChip);
+  industryWeightRow.appendChild(industryWeightResetChip);
 
   industries.forEach(ind => {
     const label = document.createElement('label');
+    label.className = 'industry-weight-label';
     label.title = `PL合計を業種間で合算する際、「${ind}」業種の寄与（トリム平均または編集値）にこの重みを掛けます（デフォルト1＝単純合計と同じ）。`;
-    label.textContent = ind + ' ';
+    label.textContent = ind;
     const input = document.createElement('input');
     input.type = 'number';
     input.step = '0.1';
     input.min = '0';
     input.value = String(getIndustryWeight(ind));
     input.className = 'industry-weight-input';
-    input.style.width = '48px';
     input.addEventListener('change', () => {
       const v = parseFloat(input.value);
       if (!isFinite(v) || v < 0) { input.value = String(getIndustryWeight(ind)); return; }
@@ -1847,19 +1922,21 @@ function setStraightenOn(on) {
       refreshAfterStructureChange();
     });
     label.appendChild(input);
-    structureFilterRow.appendChild(label);
+    industryWeightRow.appendChild(label);
   });
 
   const postFixRow = document.getElementById('postFixRow');
   const postFixLabel = document.createElement('span');
   postFixLabel.className = 'filter-label';
-  postFixLabel.textContent = '確定したツリーに対する後処理（表示・計算は互いに独立）';
+  postFixLabel.textContent = '後処理';
+  postFixLabel.title = '確定したツリーに対する後処理（表示・計算は互いに独立）';
   postFixRow.appendChild(postFixLabel);
 
   const visualStyleRow = document.getElementById('visualStyleRow');
   const visualStyleLabel = document.createElement('span');
   visualStyleLabel.className = 'filter-label';
-  visualStyleLabel.textContent = '表示スタイル（見た目のみ。計算や他のタグに影響しません）';
+  visualStyleLabel.textContent = '表示スタイル';
+  visualStyleLabel.title = '見た目のみ。計算や他のタグに影響しません。';
   visualStyleRow.appendChild(visualStyleLabel);
 
   const collapseAllChip = document.createElement('span');
@@ -2505,6 +2582,11 @@ function setStraightenOn(on) {
   // 含む完全なデータ）を基準に行っているため、「PLノードを非表示」タグがオンの間も
   // このフィルタは問題なく機能する（PLノード自体は表示されないが、その祖先ノードの
   // 絞り込みには使える）。
+  const structureMiscLabel = document.createElement('span');
+  structureMiscLabel.className = 'filter-label';
+  structureMiscLabel.textContent = 'ノード・エッジの非表示';
+  structureMiscRow.appendChild(structureMiscLabel);
+
   let hideNoImpactNodes = true;
   const impactFilterChip = document.createElement('span');
   impactFilterChip.className = 'chip' + (hideNoImpactNodes ? ' active' : '');
@@ -2516,7 +2598,7 @@ function setStraightenOn(on) {
     applyVisibility();
     refreshIsolationIfOpen();
   });
-  structureFilterRow.appendChild(impactFilterChip);
+  structureMiscRow.appendChild(impactFilterChip);
 
   // ---- positive PL/BS node filter ----
   // ストレスシナリオ分析が目的のため、増収・増益・コスト減などの「企業に好ましい」
@@ -2561,7 +2643,7 @@ function setStraightenOn(on) {
     refreshNodeScoreLabels();
     if (scenariosShown) applyScenarioDisplay();
   });
-  structureFilterRow.appendChild(step2FilterChip);
+  structureMiscRow.appendChild(step2FilterChip);
 
   // ---- Step2ノードの紫表示の切り替え ----
   const step2ColorChip = document.createElement('span');
@@ -2596,12 +2678,12 @@ function setStraightenOn(on) {
     manualHideMode = !manualHideMode;
     manualHideChip.classList.toggle('active', manualHideMode);
   });
-  structureFilterRow.appendChild(manualHideChip);
+  structureMiscRow.appendChild(manualHideChip);
 
   const manualHideResetChip = document.createElement('span');
   manualHideResetChip.className = 'chip';
   manualHideResetChip.addEventListener('click', resetManualHidden);
-  structureFilterRow.appendChild(manualHideResetChip);
+  structureMiscRow.appendChild(manualHideResetChip);
   updateManualHideResetChip = function () {
     const n = manualHiddenKeys.size;
     manualHideResetChip.textContent = `非表示ノードを戻す（${n}件）`;
@@ -2675,7 +2757,7 @@ function setStraightenOn(on) {
     refreshNodeScoreLabels();
     if (scenariosShown) applyScenarioDisplay();
   });
-  structureFilterRow.appendChild(redundantEdgeChip);
+  structureMiscRow.appendChild(redundantEdgeChip);
 
   // ---- Sugiyama座標割り当て（エッジを直線に近づける） ----
   const straightenChip = document.createElement('span');
@@ -2780,10 +2862,8 @@ function setStraightenOn(on) {
   revenueSplitChip.addEventListener('click', () => setRevenueSplit(!isRevenueSplitOn()));
   revenueSplitRow.appendChild(revenueSplitChip);
 
-  let scoreModeRow = null;
+  const scoreModeRow = document.getElementById('scoreModeRow');
   if (allScoredPaths.length > 0) {
-    scoreModeRow = document.createElement('div');
-    scoreModeRow.className = 'filter-row';
     const smLabel = document.createElement('span');
     smLabel.className = 'filter-label';
     smLabel.textContent = 'ノードのスコア計算方法';
@@ -2890,12 +2970,10 @@ function setStraightenOn(on) {
     scoreModeRow.appendChild(psLabel);
     scoreModeRow.appendChild(prob4Chip);
     scoreModeRow.appendChild(prob10Chip);
-    displayRow.insertAdjacentElement('afterend', scoreModeRow);
   }
 
+  const scenarioRow = document.getElementById('scenarioRow');
   if (allScoredPaths.length > 0) {
-    const scenarioRow = document.createElement('div');
-    scenarioRow.className = 'filter-row scenario-controls';
     const scLabel = document.createElement('span');
     scLabel.className = 'filter-label';
     scLabel.textContent = 'シナリオ分析（試験版）';
@@ -2921,7 +2999,6 @@ function setStraightenOn(on) {
     });
     scenarioRow.appendChild(scenarioToggleChip);
 
-    (scoreModeRow || displayRow).insertAdjacentElement('afterend', scenarioRow);
     scenarioRow.querySelector('#scenarioCount').addEventListener('change', () => { if (scenariosShown) applyScenarioDisplay(); });
     scenarioRow.querySelector('#scenarioOverlap').addEventListener('change', () => { if (scenariosShown) applyScenarioDisplay(); });
   }
