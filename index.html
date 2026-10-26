@@ -704,6 +704,28 @@
     display: block; font-size: 7.5px; line-height: 1; font-weight: 700;
     color: var(--warn, #c77d1a); letter-spacing: -0.2px;
   }
+  .pl-heatmap-cell.is-editable { cursor: pointer; }
+  .pl-heatmap-cell.is-editable:hover { outline: 1.5px dashed var(--accent); outline-offset: -1px; }
+  .pl-heatmap-cell.is-overridden { box-shadow: inset 0 0 0 2px var(--accent); }
+  .pl-heatmap-edit-mark {
+    display: block; font-size: 7.5px; line-height: 1; font-weight: 700;
+    color: var(--accent-ink); letter-spacing: -0.2px;
+  }
+  .pl-heatmap-cell-input {
+    width: 100%; height: 100%; border: none; border-radius: 3px; text-align: center;
+    font-family: "JetBrains Mono", monospace; font-size: 11px; font-weight: 700;
+    background: var(--surface); color: var(--ink); box-shadow: inset 0 0 0 2px var(--accent);
+  }
+  .pl-heatmap-cell-input:focus { outline: none; }
+  .pl-heatmap-edit-note {
+    font-size: 11px; color: var(--ink-muted); margin: -2px 0 8px; line-height: 1.6;
+  }
+  .pl-heatmap-edit-count { font-weight: 700; color: var(--accent-ink); }
+  .pl-heatmap-edit-reset {
+    font-size: 11px; color: var(--accent-ink); background: var(--accent-soft); border: none;
+    border-radius: 5px; padding: 2px 8px; margin-left: 4px; cursor: pointer; font-family: inherit;
+  }
+  .pl-heatmap-edit-reset:hover { filter: brightness(0.95); }
   .formula-note {
     margin-top: 14px; padding: 12px 16px; max-width: 72ch;
     border: 1px solid var(--line-strong); border-radius: 8px;
@@ -1441,6 +1463,66 @@ function setStraightenOn(on) {
     return [...n.in, ...n.out].some(e => industryPasses(e));
   }
 
+  // 「業種×最終手前ノード」ヒートマップのセルをユーザーが編集した値。
+  // key: "タグ(sales/profit/other)|業種|最終手前ノードid" -> 編集後の数値（符号そのまま）。
+  // 既存の実データ（トリム平均）を上書きする「what-if」用の値で、ページ再読み込みで消える
+  // （他の構造系タグと同じく永続化しない）。
+  const causeHeatmapOverrides = new Map();
+  // scoreBaseOutAdj/computeExcludeBestが参照しやすいよう、sales タグ分だけ別途
+  // sourceId -> Map(業種 -> 値) の形でも保持する（シナリオ計算に使われるのはsalesタグのみ。
+  // 営業利益／その他タグの編集値はヒートマップの表示だけに反映され、スコア計算には使わない）。
+  const causeHeatmapOverridesBySource = new Map();
+  function setCauseHeatmapOverride(tagKey, industry, sourceId, value) {
+    causeHeatmapOverrides.set(tagKey + '|' + industry + '|' + sourceId, value);
+    if (tagKey === 'sales') {
+      if (!causeHeatmapOverridesBySource.has(sourceId)) causeHeatmapOverridesBySource.set(sourceId, new Map());
+      causeHeatmapOverridesBySource.get(sourceId).set(industry, value);
+    }
+  }
+  function clearCauseHeatmapOverride(tagKey, industry, sourceId) {
+    causeHeatmapOverrides.delete(tagKey + '|' + industry + '|' + sourceId);
+    if (tagKey === 'sales' && causeHeatmapOverridesBySource.has(sourceId)) {
+      causeHeatmapOverridesBySource.get(sourceId).delete(industry);
+    }
+  }
+  function clearAllCauseHeatmapOverrides() {
+    causeHeatmapOverrides.clear();
+    causeHeatmapOverridesBySource.clear();
+  }
+  // computeExcludeBest・industryBreakdownExcluding・describeNodePlBreakdownの3箇所で
+  // 全く同じ「ノードid起点・業種単位（売上高/部門売上はプール）」の直接PL寄与の集計を
+  // 行っているため、共通のヘルパーに切り出す。sales タグのヒートマップで編集された値が
+  // あれば、実データのトリム平均の代わりにその値を使う（編集していない業種はそのまま
+  // 実データを使う）。新規の業種グループを編集だけで作ることはできない（既存の直接エッジが
+  // 1本も無い業種は対象外のまま）。
+  function plContributionsByIndustry(id) {
+    const edgesByIndustry = new Map(); // industry -> [edge, ...]（増減率%の記載が無いものも含む）
+    (scoreBaseOutAdj.get(id) || []).forEach(e => {
+      const t = scoreBaseNodesById.get(e.target);
+      if (!t.industry || t.plPositive) return; // ポジティブなPLノードはストレスシナリオの対象外
+      if (!SALES_PL_LABELS.has(t.label)) return; // 売上（部門売上含む）以外のPL項目は対象外
+      if (!estimateMethodAllowed(e)) return; // 実データ/逆算の切替で選ばれていない方式のエッジは対象外
+      if (isRedundantEdge(id, e.target)) return; // 迂回路により非表示になっている直接エッジは無いものとして扱う
+      if (isManuallyHiddenNode(t)) return; // 手動で非表示にしたノードは除外後のツリーとして扱う
+      if (isStep2ScoreExcluded(e.target)) return; // Step2ノードを非表示にしている場合は除外後のツリーとして扱う
+      if (isIndustryScoreExcluded(e)) return; // 業種を除外している場合は除外後のツリーとして扱う
+      if (!edgesByIndustry.has(t.industry)) edgesByIndustry.set(t.industry, []);
+      edgesByIndustry.get(t.industry).push(e);
+    });
+    const overridesForId = causeHeatmapOverridesBySource.get(id);
+    const contributions = new Map(); // industry -> { value, edgeList, overridden, n }
+    edgesByIndustry.forEach((edgeList, industry) => {
+      if (overridesForId && overridesForId.has(industry)) {
+        contributions.set(industry, { value: Math.abs(overridesForId.get(industry)), edgeList, overridden: true, n: edgeList.length });
+        return;
+      }
+      const vals = edgeList.map(e => parseFloat(e.change_pct)).filter(v => isFinite(v)).map(Math.abs);
+      if (vals.length === 0) return; // 増減率%の記載が無いエッジしか無い業種は、編集が無い限り寄与ゼロ
+      contributions.set(industry, { value: trimmedMean(vals), edgeList, overridden: false, n: vals.length });
+    });
+    return contributions;
+  }
+
   // PL/BSの勘定科目そのもの（build_node_edge_tables.py側で業種別に分割されたノード）は、
   // 枠線の色で業種を示す。ラベル文字列には業種名を含めない。
   // ノード枠線の色分け軸は「業種別」の他に、ストレスシナリオ分析用の「リスクチャネル別」
@@ -2033,40 +2115,26 @@ function setStraightenOn(on) {
     // 業種単位でグループ化する（targetId単位ではない）。「売上高減少」「部門売上減少」は
     // どちらも同じ「売上（部門売上含む）」カテゴリとして扱う方針のため、同じ業種内では
     // 両者を1つにプールしてトリム平均し、業種をまたぐ場合だけ合算する
-    // （業種×最終手前ノードヒートマップのcomputeCellStatsと同じ集計粒度に揃えている）。
-    const plGroups = new Map(); // industry -> [edge...]
+    // （業種×最終手前ノードヒートマップのcomputeCellStatsと同じ集計粒度に揃えている。
+    // 集計自体はplContributionsByIndustryに共通化し、ヒートマップでユーザーが編集した値
+    // があればそちらを使う）。
+    let plSum = 0;
+    let bestPlEdge = null, bestPlTarget = null, bestPlContribution = -1;
     if (!excludedNodes.has(id)) {
       // PL到達の判定は「PLノードを非表示」タグの状態に関わらず、常にPLノードを含む
       // 完全なデータ（scoreBaseOutAdj/scoreBaseNodesById、実体はbaseOutAdj/baseNodesById
       // と同じ）で行う。
-      (scoreBaseOutAdj.get(id) || []).forEach(e => {
-        const t = scoreBaseNodesById.get(e.target);
-        if (!t.industry || !e.change_pct || t.plPositive) return; // ポジティブなPLノードはストレスシナリオの対象外
-        if (!SALES_PL_LABELS.has(t.label)) return; // 売上（部門売上含む）以外のPL項目は対象外
-        if (!estimateMethodAllowed(e)) return; // 実データ/逆算の切替で選ばれていない方式のエッジは対象外
-        if (isRedundantEdge(id, e.target)) return; // 迂回路により非表示になっている直接エッジは無いものとして扱う
-        if (isManuallyHiddenNode(t)) return; // 手動で非表示にしたノードは除外後のツリーとして扱う
-        if (isStep2ScoreExcluded(e.target)) return; // Step2ノードを非表示にしている場合は除外後のツリーとして扱う
-        if (isIndustryScoreExcluded(e)) return; // 業種を除外している場合は除外後のツリーとして扱う
-        const v = parseFloat(e.change_pct);
-        if (!isFinite(v)) return;
-        if (!plGroups.has(t.industry)) plGroups.set(t.industry, []);
-        plGroups.get(t.industry).push(e);
+      plContributionsByIndustry(id).forEach((info, industry) => {
+        plSum += info.value;
+        if (info.value > bestPlContribution) {
+          bestPlContribution = info.value;
+          bestPlTarget = industry;
+          // 業種内の代表例として、その業種の中で一番増減率が大きいエッジをツールチップ用に残す
+          // （編集値の場合も、経路の終点ノードとして使う実在のエッジであることに変わりはない）。
+          bestPlEdge = info.edgeList.reduce((a, b) => Math.abs(parseFloat(a.change_pct) || 0) >= Math.abs(parseFloat(b.change_pct) || 0) ? a : b);
+        }
       });
     }
-    let plSum = 0;
-    let bestPlEdge = null, bestPlTarget = null, bestPlContribution = -1;
-    plGroups.forEach((edgeList, industry) => {
-      const vals = edgeList.map(e => Math.abs(parseFloat(e.change_pct)));
-      const contribution = trimmedMean(vals);
-      plSum += contribution;
-      if (contribution > bestPlContribution) {
-        bestPlContribution = contribution;
-        bestPlTarget = industry;
-        // 業種内の代表例として、その業種の中で一番増減率が大きいエッジをツールチップ用に残す
-        bestPlEdge = edgeList.reduce((a, b) => Math.abs(parseFloat(a.change_pct)) >= Math.abs(parseFloat(b.change_pct)) ? a : b);
-      }
-    });
     let bestChildId = null, bestChildVal = -Infinity, bestChildRaw = -Infinity;
     const childCandidateByTarget = new Map(); // ツールチップで「不採用」側も含めて比較できるよう、直接の子ノードごとに保持する
     // （同じ子ノードへ複数本のエッジ（会社違い等）がある場合は、その中で最も重みが大きいものを
@@ -2146,23 +2214,10 @@ function setStraightenOn(on) {
   // シナリオ2・3（除外後）の内訳表示にはこちらを使う。
   function industryBreakdownExcluding(id, excludedNodes) {
     if (excludedNodes.has(id)) return [];
-    const byIndustry = new Map();
-    (scoreBaseOutAdj.get(id) || []).forEach(e => {
-      const t = scoreBaseNodesById.get(e.target);
-      if (!t.industry || !e.change_pct || t.plPositive) return;
-      if (!SALES_PL_LABELS.has(t.label)) return;
-      if (!estimateMethodAllowed(e)) return;
-      if (isRedundantEdge(id, e.target)) return;
-      if (isManuallyHiddenNode(t)) return;
-      if (isStep2ScoreExcluded(e.target)) return;
-      if (isIndustryScoreExcluded(e)) return;
-      const v = parseFloat(e.change_pct);
-      if (!isFinite(v)) return;
-      if (!byIndustry.has(t.industry)) byIndustry.set(t.industry, []);
-      byIndustry.get(t.industry).push(Math.abs(v));
-    });
     const rows = [];
-    byIndustry.forEach((vals, industry) => rows.push({ industry, mean: trimmedMean(vals), n: vals.length }));
+    plContributionsByIndustry(id).forEach((info, industry) => {
+      rows.push({ industry, mean: info.value, n: info.n, overridden: info.overridden });
+    });
     rows.sort((a, b) => b.mean - a.mean);
     return rows;
   }
@@ -3421,24 +3476,12 @@ function setStraightenOn(on) {
   // その旨だけを示す。
   function describeNodePlBreakdown(id) {
     // computeExcludeBestのplSumと同じ粒度（業種単位、売上高/部門売上はプール）で
-    // 集計する。ツールチップの内訳表示とスコアの計算根拠を一致させるため。
-    const byIndustry = new Map(); // industry -> { vals: [] }
-    (scoreBaseOutAdj.get(id) || []).forEach(e => {
-      const t = scoreBaseNodesById.get(e.target);
-      if (!t.industry || !e.change_pct || t.plPositive) return; // ポジティブなPLノードはストレスシナリオの対象外
-      if (!SALES_PL_LABELS.has(t.label)) return; // 売上（部門売上含む）以外のPL項目は対象外
-      if (!estimateMethodAllowed(e)) return;
-      if (isRedundantEdge(id, e.target)) return;
-      if (isManuallyHiddenNode(t)) return;
-      if (isStep2ScoreExcluded(e.target)) return;
-      if (isIndustryScoreExcluded(e)) return;
-      const v = parseFloat(e.change_pct);
-      if (!isFinite(v)) return;
-      if (!byIndustry.has(t.industry)) byIndustry.set(t.industry, { vals: [] });
-      byIndustry.get(t.industry).vals.push(Math.abs(v));
-    });
+    // 集計する。ツールチップの内訳表示とスコアの計算根拠を一致させるため、
+    // plContributionsByIndustryを共通で使う（ヒートマップの編集値も反映される）。
     const rows = [];
-    byIndustry.forEach(({ vals }, industry) => rows.push({ industry, label: '売上', mean: trimmedMean(vals), n: vals.length }));
+    plContributionsByIndustry(id).forEach((info, industry) => {
+      rows.push({ industry, label: '売上', mean: info.value, n: info.n, overridden: info.overridden });
+    });
     rows.sort((a, b) => b.mean - a.mean);
     return rows;
   }
@@ -3493,7 +3536,7 @@ function setStraightenOn(on) {
     }
     const breakdown = describeNodePlBreakdown(id);
     const plLines = breakdown.length
-      ? breakdown.map(r => `${escapeHtml(r.industry)}/${escapeHtml(r.label)} ${r.mean.toFixed(1)}%`).join('<br>')
+      ? breakdown.map(r => `${escapeHtml(r.industry)}/${escapeHtml(r.label)} ${r.mean.toFixed(1)}%${r.overridden ? '（編集値）' : ''}`).join('<br>')
       : '（直接PLに繋がる増減率データなし）';
     // 子ノード経由の値は、経路表示上の採用・不採用（entry.choice）に関わらず、
     // 常に「最も重み付けスコアが大きい直接の子ノード1つ」の値がplSumに加算されている
@@ -4900,8 +4943,34 @@ function setStraightenOn(on) {
       return { stats, reached, sourceSign };
     }
 
+    // ユーザーがヒートマップのセルを編集した値（causeHeatmapOverrides）を、表示用の
+    // stats に上書きする。実データが無い（reachedに含まれない）セルへの編集は無視する
+    // （業種×最終手前ノードの関係が実際に存在する組み合わせだけを編集可能にしている）。
+    function applyCauseOverridesToStats(tagKey, result) {
+      causeHeatmapOverrides.forEach((value, overrideKey) => {
+        const sep1 = overrideKey.indexOf('|');
+        const tag = overrideKey.slice(0, sep1);
+        if (tag !== tagKey) return;
+        const cellKey = overrideKey.slice(sep1 + 1);
+        if (!result.reached.has(cellKey)) return;
+        const existing = result.stats.get(cellKey);
+        result.stats.set(cellKey, {
+          avg: value,
+          count: existing ? existing.count : 1,
+          companyCount: existing ? existing.companyCount : 0,
+          estimatedCompanyCount: existing ? existing.estimatedCompanyCount : 0,
+          estimateMethods: existing ? existing.estimateMethods : new Set(),
+          companyEquivCompanyCount: existing ? existing.companyEquivCompanyCount : 0,
+          overridden: true,
+        });
+      });
+    }
+
     const statsByTag = {};
-    Object.keys(TAG_DEFS).forEach(key => { statsByTag[key] = computeCellStats(key); });
+    Object.keys(TAG_DEFS).forEach(key => {
+      statsByTag[key] = computeCellStats(key);
+      applyCauseOverridesToStats(key, statsByTag[key]);
+    });
     // 列の存在・並び順を決める専用集計（実データ/逆算の切替フィルタを無視し、両方式を
     // 合算する）。セルの表示内容（statsByTag）とは別に持ち、推計方式を切り替えても
     // 列の本数・並びが変わらないようにする。
@@ -5052,7 +5121,9 @@ function setStraightenOn(on) {
       sourceIds.forEach(sid => {
         const td = document.createElement('td');
         td.className = 'pl-heatmap-cell';
-        cellEls.set(ind + '|' + sid, td);
+        const cellKey = ind + '|' + sid;
+        cellEls.set(cellKey, td);
+        td.addEventListener('click', () => startCellEdit(td, cellKey));
         tr.appendChild(td);
       });
       tbody.appendChild(tr);
@@ -5061,6 +5132,44 @@ function setStraightenOn(on) {
 
     const caption = document.createElement('div');
     caption.className = 'pl-heatmap-caption';
+
+    const editNote = document.createElement('div');
+    editNote.className = 'pl-heatmap-edit-note';
+
+    function countOverridesForTag(tagKey) {
+      let n = 0;
+      causeHeatmapOverrides.forEach((v, k) => { if (k.indexOf(tagKey + '|') === 0) n++; });
+      return n;
+    }
+
+    function refreshEditNote(tagKey) {
+      const n = countOverridesForTag(tagKey);
+      const scoreNote = tagKey === 'sales'
+        ? 'このタグの値はシナリオのスコア計算に使われます。'
+        : 'このタグの値はヒートマップの表示用で、シナリオのスコア計算には使われません（スコアに使われるのは「売上」タグのみ）。';
+      editNote.innerHTML = `セルをクリックすると数値を編集できます（空欄で確定すると実データに戻ります）。${scoreNote}` +
+        (n > 0 ? ` <span class="pl-heatmap-edit-count">編集中: ${n}件</span> <button type="button" class="pl-heatmap-edit-reset">このタグの編集をリセット</button>` : '');
+      const resetBtn = editNote.querySelector('.pl-heatmap-edit-reset');
+      if (resetBtn) {
+        resetBtn.addEventListener('click', () => {
+          Array.from(causeHeatmapOverrides.keys())
+            .filter(k => k.indexOf(tagKey + '|') === 0)
+            .forEach(k => causeHeatmapOverrides.delete(k));
+          // sourceIdごとのインデックスも同じタグ分だけ作り直す（他タグのインデックスは無関係なので触らない）。
+          if (tagKey === 'sales') causeHeatmapOverridesBySource.clear();
+          causeHeatmapOverrides.forEach((v, k) => {
+            const sep1 = k.indexOf('|');
+            if (k.slice(0, sep1) !== 'sales') return;
+            const rest = k.slice(sep1 + 1);
+            const sep2 = rest.indexOf('|');
+            const industry = rest.slice(0, sep2), sourceId = rest.slice(sep2 + 1);
+            if (!causeHeatmapOverridesBySource.has(sourceId)) causeHeatmapOverridesBySource.set(sourceId, new Map());
+            causeHeatmapOverridesBySource.get(sourceId).set(industry, v);
+          });
+          refreshAfterStructureChange();
+        });
+      }
+    }
 
     function paint(tagKey) {
       const result = statsByTag[tagKey];
@@ -5077,6 +5186,7 @@ function setStraightenOn(on) {
           td.classList.add('is-na');
           return;
         }
+        td.classList.add('is-editable'); // 直接エッジが存在する組み合わせはクリックで編集できる
         const sep = key.indexOf('|');
         const ind = key.slice(0, sep), sid = key.slice(sep + 1);
         activeColSet.add(sid);
@@ -5086,7 +5196,7 @@ function setStraightenOn(on) {
           nodataSpan.className = 'pl-heatmap-nodata';
           nodataSpan.textContent = '数値記載なし';
           td.appendChild(nodataSpan);
-          td.title = `${ind} / ${sourcesMap.get(sid)}: 該当データなし`;
+          td.title = `${ind} / ${sourcesMap.get(sid)}: 該当データなし（クリックして値を入力できます）`;
           return;
         }
         const avg = s.avg;
@@ -5095,7 +5205,16 @@ function setStraightenOn(on) {
         valueSpan.className = 'pl-heatmap-value';
         valueSpan.textContent = (avg > 0 ? '+' : '') + avg.toFixed(1) + '%';
         td.appendChild(valueSpan);
-        let titleText = `${ind} / ${sourcesMap.get(sid)}\nトリム平均${avg > 0 ? '+' : ''}${avg.toFixed(1)}%（${s.companyCount}社）`;
+        let titleText = s.overridden
+          ? `${ind} / ${sourcesMap.get(sid)}\n編集値 ${avg > 0 ? '+' : ''}${avg.toFixed(1)}%（クリックして再編集。空欄で確定すると実データに戻ります）`
+          : `${ind} / ${sourcesMap.get(sid)}\nトリム平均${avg > 0 ? '+' : ''}${avg.toFixed(1)}%（${s.companyCount}社・クリックして編集できます）`;
+        if (s.overridden) {
+          td.classList.add('is-overridden');
+          const editSup = document.createElement('sup');
+          editSup.className = 'pl-heatmap-edit-mark';
+          editSup.textContent = '✎編集値';
+          td.appendChild(editSup);
+        }
         if (s.estimatedCompanyCount > 0) {
           td.classList.add('has-estimated');
           const methods = s.estimateMethods || new Set();
@@ -5121,9 +5240,58 @@ function setStraightenOn(on) {
       });
       activeCols = activeColSet.size;
       caption.textContent = `「ホルムズ海峡封鎖」から辿れる範囲で、${TAG_DEFS[tagKey].chipLabel}に直接つながるエッジを表示中（全${sourceIds.length}列中${activeCols}列が該当・色の濃さは該当社数を表す。該当しない組み合わせはグレー）`;
+      refreshEditNote(tagKey);
+    }
+
+    // セルをクリックして数値を編集する。result.reached（＝直接のエッジが実際に存在する
+    // 組み合わせ）に含まれるセルだけが編集対象（存在しない業種×ノードの組み合わせを
+    // 編集で新規に作ることはできない）。
+    function startCellEdit(td, key) {
+      const result = statsByTag[activeTag];
+      if (!result.reached.has(key)) return;
+      if (td.querySelector('input')) return;
+      const sep = key.indexOf('|');
+      const ind = key.slice(0, sep), sid = key.slice(sep + 1);
+      const s = result.stats.get(key);
+      const input = document.createElement('input');
+      input.type = 'number';
+      input.step = '0.1';
+      input.className = 'pl-heatmap-cell-input';
+      input.value = s ? s.avg.toFixed(1) : '';
+      input.placeholder = '数値を入力';
+      td.innerHTML = '';
+      td.appendChild(input);
+      input.focus();
+      input.select();
+      let committed = false;
+      function commit() {
+        if (committed) return;
+        committed = true;
+        const raw = input.value.trim();
+        if (raw === '') {
+          clearCauseHeatmapOverride(activeTag, ind, sid);
+        } else {
+          const v = parseFloat(raw);
+          if (!isFinite(v)) { paint(activeTag); return; } // 不正な入力は無視して元の表示に戻す
+          setCauseHeatmapOverride(activeTag, ind, sid, v);
+        }
+        refreshAfterStructureChange();
+      }
+      function cancel() {
+        if (committed) return;
+        committed = true;
+        paint(activeTag);
+      }
+      input.addEventListener('keydown', evt => {
+        if (evt.key === 'Enter') { evt.preventDefault(); input.blur(); }
+        else if (evt.key === 'Escape') { evt.preventDefault(); cancel(); }
+      });
+      input.addEventListener('blur', commit);
+      input.addEventListener('click', evt => evt.stopPropagation());
     }
 
     wrap.appendChild(caption);
+    wrap.appendChild(editNote);
     wrap.appendChild(table);
 
     const tagLabelEl = document.createElement('span');
@@ -5244,7 +5412,7 @@ function setStraightenOn(on) {
           const lv = sc.levels[j];
           const entry = lv.entry;
           const plLines = lv.industryBreakdown.length
-            ? lv.industryBreakdown.map(r => `${r.industry}/売上 ${r.mean.toFixed(1)}%（${r.n}件）`).join('\n')
+            ? lv.industryBreakdown.map(r => `${r.industry}/売上 ${r.mean.toFixed(1)}%（${r.overridden ? '編集値' : r.n + '件'}）`).join('\n')
             : '（直接PLに繋がる増減率データなし）';
           const nonZero = (entry.childCandidates || []).filter(c => c.weightedVal > 1e-9);
           let childLine = '（対象となる子ノードなし）';
