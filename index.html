@@ -1377,10 +1377,10 @@ function setStraightenOn(on) {
     if (!node) return;
     manualHiddenKeys.add(nodeKeyOf(node));
     saveManualHiddenKeys();
+    invalidateExcludeScoreCache(); // scenarioFilterNodeCacheもここで無効化される。applyVisibilityより前に呼ぶ。
     applyVisibility();
     refreshIsolationIfOpen();
     updateManualHideResetChip();
-    invalidateExcludeScoreCache();
     refreshPlHeatmapFilters();
     refreshCauseHeatmap();
     refreshNodeScoreLabels();
@@ -1390,10 +1390,10 @@ function setStraightenOn(on) {
     if (manualHiddenKeys.size === 0) return;
     manualHiddenKeys.clear();
     saveManualHiddenKeys();
+    invalidateExcludeScoreCache(); // scenarioFilterNodeCacheもここで無効化される。applyVisibilityより前に呼ぶ。
     applyVisibility();
     refreshIsolationIfOpen();
     updateManualHideResetChip();
-    invalidateExcludeScoreCache();
     refreshPlHeatmapFilters();
     refreshCauseHeatmap();
     refreshNodeScoreLabels();
@@ -1808,10 +1808,10 @@ function setStraightenOn(on) {
   industryExcludeRow.appendChild(industryExcludeLabel);
 
   function refreshAfterStructureChange() {
-    applyVisibility();
-    refreshIsolationIfOpen();
-    invalidateExcludeScoreCache();
+    invalidateExcludeScoreCache(); // scenarioFilterNodeCacheもここで無効化される。
     allScoredPaths = computeAllScoredPaths();
+    applyVisibility(); // scenarioNodePasses経由でシナリオの絞り込みを使うため、無効化の後に呼ぶ。
+    refreshIsolationIfOpen();
     refreshPlHeatmapFilters();
     refreshCauseHeatmap();
     refreshNodeScoreLabels();
@@ -2023,6 +2023,7 @@ function setStraightenOn(on) {
     probabilityScaleSelects.forEach(sel => { sel.value = scale; sel.title = tagOptionTitle(PROBABILITY_SCALE_CHOICES, scale); });
     invalidateExcludeScoreCache();
     if (scenariosShown) applyScenarioDisplay();
+    if (scenarioFilterOn) { applyVisibility(); refreshIsolationIfOpen(); }
     refreshNodeScoreLabels();
     refreshAllEdgeProbViews();
   }
@@ -2376,7 +2377,7 @@ function setStraightenOn(on) {
     }
     return excludeScoreCache;
   }
-  function invalidateExcludeScoreCache() { excludeScoreCache = null; totalImpactCache = null; cumulativeProbCache = null; }
+  function invalidateExcludeScoreCache() { excludeScoreCache = null; totalImpactCache = null; cumulativeProbCache = null; invalidateScenarioFilterCache(); }
 
   // ノードの「累積蓋然性」＝根（入ってくるエッジが無いノード）から、親→子エッジの
   // 蓋然性（edgeProbabilityWeight、「蓋然性の段階」トグルに連動）を掛けながら辿った値。
@@ -2612,10 +2613,10 @@ function setStraightenOn(on) {
   step2FilterChip.addEventListener('click', () => {
     hideStep2Nodes = !hideStep2Nodes;
     step2FilterChip.classList.toggle('active', hideStep2Nodes);
+    invalidateExcludeScoreCache(); // scenarioFilterNodeCacheもここで無効化される。applyVisibilityより前に呼ぶ。
+    allScoredPaths = computeAllScoredPaths();
     applyVisibility();
     refreshIsolationIfOpen();
-    invalidateExcludeScoreCache();
-    allScoredPaths = computeAllScoredPaths();
     refreshPlHeatmapFilters();
     refreshCauseHeatmap();
     refreshNodeScoreLabels();
@@ -2677,19 +2678,43 @@ function setStraightenOn(on) {
   updateManualHideResetChip();
 
   // ---- シナリオに関連するノードのみを表示 ----
-  // 「PL合計×蓋然性」で当初選ばれたシナリオ1〜3の経路上のノード（node.scenarioRelated）
-  // だけに絞り込む。経路そのものをタグ付けしているため、祖先・子孫を辿る必要はない。
-  const anyScenarioRelated = DATA_BASE.nodes.some(n => n.scenarioRelated);
+  // 固定のCSVタグ（旧node.scenarioRelated）ではなく、現在のスコア計算方式・業種フィルター・
+  // 重み等の設定のもとで「シナリオ分析」に実際に表示される上位シナリオ（シナリオ数・
+  // 重複許容率の設定も反映）の経路上のノードだけに、常に最新の状態で絞り込む。
+  // scenarioFilterNodeCacheはinvalidateExcludeScoreCache()と同じタイミングで無効化する
+  // （構造を変えるタグが変わればシナリオの経路も変わるため）。
   let scenarioFilterOn = false;
-  function scenarioNodePasses(id) { return !scenarioFilterOn || !!nodesById.get(id).scenarioRelated; }
-  if (anyScenarioRelated) {
+  let scenarioFilterNodeCache = null;
+  function computeScenarioFilterNodeSet() {
+    const countInput = document.getElementById('scenarioCount');
+    const overlapInput = document.getElementById('scenarioOverlap');
+    const count = Math.max(1, Math.min(8, parseInt(countInput && countInput.value, 10) || 3));
+    let scenarios;
+    if (scoreMode === 'exclude') scenarios = computeExcludeScenariosGlobal(count);
+    else if (scoreMode === 'cumprob') scenarios = computeCumProbScenariosGlobal(count);
+    else {
+      const overlapPct = Math.max(0, Math.min(100, parseInt(overlapInput && overlapInput.value, 10) || 50));
+      scenarios = pickDiverseScenarios(count, overlapPct);
+    }
+    const set = new Set();
+    scenarios.forEach(sc => sc.path.forEach(id => set.add(id)));
+    return set;
+  }
+  function invalidateScenarioFilterCache() { scenarioFilterNodeCache = null; }
+  function scenarioNodePasses(id) {
+    if (!scenarioFilterOn) return true;
+    if (!scenarioFilterNodeCache) scenarioFilterNodeCache = computeScenarioFilterNodeSet();
+    return scenarioFilterNodeCache.has(id);
+  }
+  if (allScoredPaths.length > 0) {
     const scenarioFilterChip = document.createElement('span');
     scenarioFilterChip.className = 'chip';
     scenarioFilterChip.textContent = 'シナリオに関連するノードのみを表示';
-    scenarioFilterChip.title = 'オンにすると、Step2の拡充対象として当初選ばれた「シナリオ1〜3」の経路上のノードだけに絞り込んで表示します（その後ツリー全体に拡張されたStep2の追加分は含みません）。';
+    scenarioFilterChip.title = 'オンにすると、現在の設定（スコア計算方式・業種の絞り込み・除外・重み等）のもとで「シナリオ分析」に実際に表示される上位シナリオ（シナリオ数の設定件数）の経路上のノードだけに絞り込みます。設定を変えると対象のシナリオも自動的に追従します。';
     scenarioFilterChip.addEventListener('click', () => {
       scenarioFilterOn = !scenarioFilterOn;
       scenarioFilterChip.classList.toggle('active', scenarioFilterOn);
+      invalidateScenarioFilterCache();
       applyVisibility();
       refreshIsolationIfOpen();
     });
@@ -2727,9 +2752,9 @@ function setStraightenOn(on) {
   redundantEdgeChip.addEventListener('click', () => {
     hideRedundantEdges = !hideRedundantEdges;
     redundantEdgeChip.classList.toggle('active', hideRedundantEdges);
+    invalidateExcludeScoreCache(); // scenarioFilterNodeCacheもここで無効化される。applyVisibilityより前に呼ぶ。
     applyVisibility();
     refreshIsolationIfOpen();
-    invalidateExcludeScoreCache();
     refreshPlHeatmapFilters();
     refreshCauseHeatmap();
     refreshNodeScoreLabels();
@@ -2870,6 +2895,7 @@ function setStraightenOn(on) {
       updateProbScaleVisibility(scoreMode);
       invalidateExcludeScoreCache();
       if (scenariosShown) applyScenarioDisplay();
+      if (scenarioFilterOn) { applyVisibility(); refreshIsolationIfOpen(); }
       refreshNodeScoreLabels();
     }
     probModeSelect.addEventListener('change', () => setProbabilityMode(probModeSelect.value));
@@ -2891,7 +2917,9 @@ function setStraightenOn(on) {
       if (overlapLabel) overlapLabel.closest('label').style.display = hideOverlap ? 'none' : '';
       updateProbModeVisibility(mode);
       if (mode !== 'exclude' && mode !== 'cumprob') allScoredPaths = computeAllScoredPaths();
+      invalidateScenarioFilterCache();
       if (scenariosShown) applyScenarioDisplay();
+      if (scenarioFilterOn) { applyVisibility(); refreshIsolationIfOpen(); }
       refreshNodeScoreLabels();
     }
     scoreModeSelect.addEventListener('change', () => setScoreMode(scoreModeSelect.value));
@@ -2929,8 +2957,16 @@ function setStraightenOn(on) {
     });
     scenarioRow.appendChild(scenarioToggleChip);
 
-    scenarioRow.querySelector('#scenarioCount').addEventListener('change', () => { if (scenariosShown) applyScenarioDisplay(); });
-    scenarioRow.querySelector('#scenarioOverlap').addEventListener('change', () => { if (scenariosShown) applyScenarioDisplay(); });
+    scenarioRow.querySelector('#scenarioCount').addEventListener('change', () => {
+      invalidateScenarioFilterCache();
+      if (scenariosShown) applyScenarioDisplay();
+      if (scenarioFilterOn) { applyVisibility(); refreshIsolationIfOpen(); }
+    });
+    scenarioRow.querySelector('#scenarioOverlap').addEventListener('change', () => {
+      invalidateScenarioFilterCache();
+      if (scenariosShown) applyScenarioDisplay();
+      if (scenarioFilterOn) { applyVisibility(); refreshIsolationIfOpen(); }
+    });
   }
 
   // ---- text measuring ----
@@ -5394,6 +5430,7 @@ function setStraightenOn(on) {
       estimateMethodMode = estSelect.value;
       invalidateExcludeScoreCache();
       refreshNodeScoreLabels();
+      if (scenarioFilterOn) { applyVisibility(); refreshIsolationIfOpen(); }
       build();
     });
     tagRow.appendChild(estSelect);
