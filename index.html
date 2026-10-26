@@ -1745,6 +1745,7 @@ function setStraightenOn(on) {
     document.querySelectorAll('.chip[data-industry]').forEach(c => c.classList.remove('active'));
     resetChip.classList.add('active');
     applyVisibility();
+    refreshIsolationIfOpen();
   });
   filterRow.appendChild(resetChip);
 
@@ -1763,6 +1764,7 @@ function setStraightenOn(on) {
       }
       resetChip.classList.toggle('active', activeIndustries.size === 0);
       applyVisibility();
+      refreshIsolationIfOpen();
     });
     filterRow.appendChild(chip);
   });
