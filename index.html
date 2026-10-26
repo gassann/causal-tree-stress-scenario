@@ -187,6 +187,18 @@
   .chip.reset { border-style: dashed; }
   .chip.disabled { opacity: .4; cursor: not-allowed; }
   .chip.disabled:hover { border-color: var(--line-strong); color: var(--ink-muted); }
+  .tag-select {
+    font-family: "Zen Kaku Gothic New", sans-serif;
+    font-size: 13px;
+    padding: 5px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--line-strong);
+    background: var(--surface-alt);
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .tag-select:hover { border-color: var(--accent); }
+  .tag-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
   /* タグが増えて見づらくなったため、役割ごとに.tag-sectionのカードへグループ化している。
      「表示・絞り込み」「スコア・シナリオ計算」「ツリー構造を変えるタグ」「後処理・表示
@@ -1670,6 +1682,25 @@ function setStraightenOn(on) {
   }
   rebuildLegend();
 
+  // 単一選択のタグ（複数選択の「業種で絞り込み」等とは違い、常にどれか1つだけを選ぶもの）
+  // は、チップを並べるとタグ一覧が横に伸びて見づらくなるため<select>で表示する。
+  // choices: [value, label, title?][]。
+  function buildTagOptions(select, choices, currentValue) {
+    choices.forEach(([value, label, title]) => {
+      const opt = document.createElement('option');
+      opt.value = value;
+      opt.textContent = label;
+      if (title) opt.title = title;
+      if (value === currentValue) opt.selected = true;
+      select.appendChild(opt);
+    });
+    select.title = tagOptionTitle(choices, currentValue);
+  }
+  function tagOptionTitle(choices, value) {
+    const chosen = choices.find(([v]) => v === value);
+    return (chosen && chosen[2]) || '';
+  }
+
   const colorModeRow = document.getElementById('colorModeRow');
   const colorModeLabel = document.createElement('span');
   colorModeLabel.className = 'filter-label';
@@ -1681,25 +1712,15 @@ function setStraightenOn(on) {
     ['transmission', '伝播チャネル別'],
   ];
   if (regionValues.length > 0) colorModeChipDefs.push(['region', '地域別']);
-  const colorModeChipByMode = new Map();
-  colorModeChipDefs.forEach(([mode, label]) => {
-    const chip = document.createElement('span');
-    chip.className = 'chip' + (mode === nodeColorMode ? ' active' : '');
-    chip.textContent = label;
-    chip.addEventListener('click', () => {
-      nodeColorMode = mode;
-      colorModeRow.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
-      chip.classList.add('active');
-      applyNodeColorMode();
-    });
-    colorModeRow.appendChild(chip);
-    colorModeChipByMode.set(mode, chip);
-  });
+  const colorModeSelect = document.createElement('select');
+  colorModeSelect.className = 'tag-select';
+  buildTagOptions(colorModeSelect, colorModeChipDefs, nodeColorMode);
+  colorModeSelect.addEventListener('change', () => setNodeColorMode(colorModeSelect.value));
+  colorModeRow.appendChild(colorModeSelect);
   function setNodeColorMode(mode) {
     nodeColorMode = mode;
-    colorModeRow.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
-    const chip = colorModeChipByMode.get(mode);
-    if (chip) chip.classList.add('active');
+    colorModeSelect.value = mode;
+    colorModeSelect.title = tagOptionTitle(colorModeChipDefs, mode);
     applyNodeColorMode();
   }
 
@@ -2045,12 +2066,16 @@ function setStraightenOn(on) {
   // 蓋然性を4段階(1-4)と10段階(10%刻み、エッジのみ試験的に付与)のどちらの値で
   // 重み付けに使うか。10段階が設定されていないエッジ・ノードでは常に4段階にフォールバックする。
   let probabilityScale = '4';
-  // scoreModeRow内の永続的な4段階/10段階チップ（「エッジ蓋然性」編集ビューは切り替えの
-  // たびに作り直されるためここには登録しない。自分のクラスはrender時に直接計算する）。
-  const probabilityScaleChips = [];
+  // scoreModeRow内の永続的な4段階/10段階select（「エッジ蓋然性」編集ビューは切り替えの
+  // たびに作り直されるためここには登録しない。自分の表示はrender時に直接計算する）。
+  const probabilityScaleSelects = [];
+  const PROBABILITY_SCALE_CHOICES = [
+    ['4', '4段階', '従来の蓋然性(1-4)を4→1.0/3→0.75/2→0.5/1→0.25の重みに変換して使います（デフォルト）。'],
+    ['10', '10段階（試験）', 'エッジに試験的に付与した蓋然性(10段階・10%刻み)の値をそのまま重み（%÷100）として使います。10段階が未設定のエッジは自動的に4段階の値にフォールバックします。ノード基準モードでは10段階の値を持たないため選べません。'],
+  ];
   function setProbabilityScale(scale) {
     probabilityScale = scale;
-    probabilityScaleChips.forEach(({ el, scale: s }) => el.classList.toggle('active', s === scale));
+    probabilityScaleSelects.forEach(sel => { sel.value = scale; sel.title = tagOptionTitle(PROBABILITY_SCALE_CHOICES, scale); });
     invalidateExcludeScoreCache();
     if (scenariosShown) applyScenarioDisplay();
     refreshNodeScoreLabels();
@@ -2869,85 +2894,69 @@ function setStraightenOn(on) {
     smLabel.textContent = 'ノードのスコア計算方法';
     scoreModeRow.appendChild(smLabel);
 
-    const productChip = document.createElement('span');
-    productChip.className = 'chip';
-    productChip.textContent = '影響度×蓋然性（最大16点）';
-    const zoneChip = document.createElement('span');
-    zoneChip.className = 'chip';
-    zoneChip.textContent = 'マトリクス色ゾーン（赤4/橙3/黄2/緑1・最大4点）';
-    const excludeChip = document.createElement('span');
-    excludeChip.className = 'chip active';
-    excludeChip.textContent = 'PL合計×蓋然性（除外して再計算）';
-    excludeChip.title = 'PL/BS勘定科目（業種ごとに1ノード）ごとに増減率(%)のトリム平均を取り、影響が及ぶノードの数だけ合計します。蓋然性(1-4)は4→1.0/3→0.73/2→0.5/1→0.25の重みに変換して掛けながら根まで最大値で伝播し、上位シナリオで使われた最下層ノード（原因ノード自身）を除外して再計算することで次点のシナリオを求めるため、重複許容率の調整は不要です。蓋然性をノード／エッジのどちらの値で使うかは下の「蓋然性の算出元」で切り替えられます。';
-    const cumProbChip = document.createElement('span');
-    cumProbChip.className = 'chip';
-    cumProbChip.textContent = '累積蓋然性のみ（最尤経路）';
-    cumProbChip.title = 'PL/BSへの影響度は一切使わず、「ホルムズ海峡封鎖」を起点とした累積蓋然性（各ノード下に表示されている値）だけでシナリオを選びます。累積蓋然性が最も大きいPL直結ノードを上位から選び、その経路は各段で寄与が最大の親を遡って復元します。上位シナリオで使われた原因ノードは除外して次点を探すため、重複許容率の調整は不要です。';
+    const SCORE_MODE_CHOICES = [
+      ['product', '影響度×蓋然性（最大16点）'],
+      ['zone', 'マトリクス色ゾーン（赤4/橙3/黄2/緑1・最大4点）'],
+      ['exclude', 'PL合計×蓋然性（除外して再計算）', 'PL/BS勘定科目（業種ごとに1ノード）ごとに増減率(%)のトリム平均を取り、影響が及ぶノードの数だけ合計します。蓋然性(1-4)は4→1.0/3→0.73/2→0.5/1→0.25の重みに変換して掛けながら根まで最大値で伝播し、上位シナリオで使われた最下層ノード（原因ノード自身）を除外して再計算することで次点のシナリオを求めるため、重複許容率の調整は不要です。蓋然性をノード／エッジのどちらの値で使うかは下の「蓋然性の算出元」で切り替えられます。'],
+      ['cumprob', '累積蓋然性のみ（最尤経路）', 'PL/BSへの影響度は一切使わず、「ホルムズ海峡封鎖」を起点とした累積蓋然性（各ノード下に表示されている値）だけでシナリオを選びます。累積蓋然性が最も大きいPL直結ノードを上位から選び、その経路は各段で寄与が最大の親を遡って復元します。上位シナリオで使われた原因ノードは除外して次点を探すため、重複許容率の調整は不要です。'],
+    ];
+    const scoreModeSelect = document.createElement('select');
+    scoreModeSelect.className = 'tag-select';
+    buildTagOptions(scoreModeSelect, SCORE_MODE_CHOICES, scoreMode);
+    scoreModeRow.appendChild(scoreModeSelect);
 
     // ---- probability source: node-level vs edge-level (same row, visible only in 'exclude' mode) ----
     const pmLabel = document.createElement('span');
     pmLabel.className = 'filter-label';
     pmLabel.style.marginLeft = '14px';
     pmLabel.textContent = '蓋然性の算出元';
-    const probNodeChip = document.createElement('span');
-    probNodeChip.className = 'chip';
-    probNodeChip.textContent = 'ノードの蓋然性';
-    probNodeChip.title = '結果ノード自身に割り振られた蓋然性(1-4)を使って重み付けします。同じ結果ノードであれば、原因が何であっても同じ重みになります。';
-    const probEdgeChip = document.createElement('span');
-    probEdgeChip.className = 'chip active';
-    probEdgeChip.textContent = 'エッジの蓋然性';
-    probEdgeChip.title = '原因→結果の個々のエッジに割り振られた蓋然性(1-4)を使って重み付けします（デフォルト）。「結果が起こる確率は原因によって異なる」という考え方で、同じ結果ノードでも原因ごとに異なる重みを使えます（試験版・エッジ蓋然性が未設定の場合は1.0として扱います。PL勘定科目に繋がるエッジは結果が確定事象として扱われるため対象外です）。';
+    const PROBABILITY_MODE_CHOICES = [
+      ['node', 'ノードの蓋然性', '結果ノード自身に割り振られた蓋然性(1-4)を使って重み付けします。同じ結果ノードであれば、原因が何であっても同じ重みになります。'],
+      ['edge', 'エッジの蓋然性', '原因→結果の個々のエッジに割り振られた蓋然性(1-4)を使って重み付けします（デフォルト）。「結果が起こる確率は原因によって異なる」という考え方で、同じ結果ノードでも原因ごとに異なる重みを使えます（試験版・エッジ蓋然性が未設定の場合は1.0として扱います。PL勘定科目に繋がるエッジは結果が確定事象として扱われるため対象外です）。'],
+    ];
+    const probModeSelect = document.createElement('select');
+    probModeSelect.className = 'tag-select';
+    buildTagOptions(probModeSelect, PROBABILITY_MODE_CHOICES, probabilityMode);
     // ---- probability scale: 4段階 vs 10段階（10段階はエッジ蓋然性のみ試験的に付与済み） ----
     const psLabel = document.createElement('span');
     psLabel.className = 'filter-label';
     psLabel.style.marginLeft = '14px';
     psLabel.textContent = '蓋然性の段階';
-    const prob4Chip = document.createElement('span');
-    prob4Chip.className = 'chip active';
-    prob4Chip.textContent = '4段階';
-    prob4Chip.title = '従来の蓋然性(1-4)を4→1.0/3→0.75/2→0.5/1→0.25の重みに変換して使います（デフォルト）。';
-    const prob10Chip = document.createElement('span');
-    prob10Chip.className = 'chip';
-    prob10Chip.textContent = '10段階（試験）';
-    prob10Chip.title = 'エッジに試験的に付与した蓋然性(10段階・10%刻み)の値をそのまま重み（%÷100）として使います。10段階が未設定のエッジは自動的に4段階の値にフォールバックします。ノード基準モードでは10段階の値を持たないため選べません。';
-    probabilityScaleChips.push({ el: prob4Chip, scale: '4' }, { el: prob10Chip, scale: '10' });
-    prob4Chip.addEventListener('click', () => setProbabilityScale('4'));
-    prob10Chip.addEventListener('click', () => setProbabilityScale('10'));
+    const probScaleSelect = document.createElement('select');
+    probScaleSelect.className = 'tag-select';
+    buildTagOptions(probScaleSelect, PROBABILITY_SCALE_CHOICES, probabilityScale);
+    probabilityScaleSelects.push(probScaleSelect);
+    probScaleSelect.addEventListener('change', () => setProbabilityScale(probScaleSelect.value));
     function updateProbScaleVisibility(mode) {
       const show = (mode === 'exclude' && probabilityMode === 'edge') || mode === 'cumprob';
       psLabel.style.display = show ? '' : 'none';
-      prob4Chip.style.display = show ? '' : 'none';
-      prob10Chip.style.display = show ? '' : 'none';
+      probScaleSelect.style.display = show ? '' : 'none';
     }
 
     function setProbabilityMode(mode) {
       probabilityMode = mode;
-      probNodeChip.classList.toggle('active', mode === 'node');
-      probEdgeChip.classList.toggle('active', mode === 'edge');
+      probModeSelect.value = mode;
+      probModeSelect.title = tagOptionTitle(PROBABILITY_MODE_CHOICES, mode);
       if (mode === 'node' && probabilityScale === '10') setProbabilityScale('4'); // ノード基準には10段階の値がないため自動で4段階に戻す
       updateProbScaleVisibility(scoreMode);
       invalidateExcludeScoreCache();
       if (scenariosShown) applyScenarioDisplay();
       refreshNodeScoreLabels();
     }
-    probNodeChip.addEventListener('click', () => setProbabilityMode('node'));
-    probEdgeChip.addEventListener('click', () => setProbabilityMode('edge'));
+    probModeSelect.addEventListener('change', () => setProbabilityMode(probModeSelect.value));
 
     function updateProbModeVisibility(mode) {
       const show = mode === 'exclude';
       pmLabel.style.display = show ? '' : 'none';
-      probNodeChip.style.display = show ? '' : 'none';
-      probEdgeChip.style.display = show ? '' : 'none';
+      probModeSelect.style.display = show ? '' : 'none';
       updateProbScaleVisibility(mode);
     }
     updateProbModeVisibility(scoreMode);
 
     function setScoreMode(mode) {
       scoreMode = mode;
-      productChip.classList.toggle('active', mode === 'product');
-      zoneChip.classList.toggle('active', mode === 'zone');
-      excludeChip.classList.toggle('active', mode === 'exclude');
-      cumProbChip.classList.toggle('active', mode === 'cumprob');
+      scoreModeSelect.value = mode;
+      scoreModeSelect.title = tagOptionTitle(SCORE_MODE_CHOICES, mode);
       const overlapLabel = document.getElementById('scenarioOverlap');
       const hideOverlap = mode === 'exclude' || mode === 'cumprob';
       if (overlapLabel) overlapLabel.closest('label').style.display = hideOverlap ? 'none' : '';
@@ -2956,20 +2965,12 @@ function setStraightenOn(on) {
       if (scenariosShown) applyScenarioDisplay();
       refreshNodeScoreLabels();
     }
-    productChip.addEventListener('click', () => setScoreMode('product'));
-    zoneChip.addEventListener('click', () => setScoreMode('zone'));
-    excludeChip.addEventListener('click', () => setScoreMode('exclude'));
-    cumProbChip.addEventListener('click', () => setScoreMode('cumprob'));
-    scoreModeRow.appendChild(productChip);
-    scoreModeRow.appendChild(zoneChip);
-    scoreModeRow.appendChild(excludeChip);
-    scoreModeRow.appendChild(cumProbChip);
+    scoreModeSelect.addEventListener('change', () => setScoreMode(scoreModeSelect.value));
+
     scoreModeRow.appendChild(pmLabel);
-    scoreModeRow.appendChild(probNodeChip);
-    scoreModeRow.appendChild(probEdgeChip);
+    scoreModeRow.appendChild(probModeSelect);
     scoreModeRow.appendChild(psLabel);
-    scoreModeRow.appendChild(prob4Chip);
-    scoreModeRow.appendChild(prob10Chip);
+    scoreModeRow.appendChild(probScaleSelect);
   }
 
   const scenarioRow = document.getElementById('scenarioRow');
@@ -5434,21 +5435,16 @@ function setStraightenOn(on) {
     tagLabelEl.textContent = 'PL項目';
     tagRow.appendChild(tagLabelEl);
 
-    const chips = {};
-    Object.keys(TAG_DEFS).forEach(key => {
-      const chip = document.createElement('span');
-      chip.className = 'chip' + (key === activeTag ? ' active' : '');
-      chip.textContent = TAG_DEFS[key].chipLabel;
-      chip.title = TAG_DEFS[key].title;
-      chip.addEventListener('click', () => {
-        if (activeTag === key) return;
-        activeTag = key;
-        Object.keys(chips).forEach(k => chips[k].classList.toggle('active', k === activeTag));
-        paint(activeTag);
-      });
-      chips[key] = chip;
-      tagRow.appendChild(chip);
+    const TAG_CHOICES = Object.keys(TAG_DEFS).map(key => [key, TAG_DEFS[key].chipLabel, TAG_DEFS[key].title]);
+    const tagSelect = document.createElement('select');
+    tagSelect.className = 'tag-select';
+    buildTagOptions(tagSelect, TAG_CHOICES, activeTag);
+    tagSelect.addEventListener('change', () => {
+      activeTag = tagSelect.value;
+      tagSelect.title = tagOptionTitle(TAG_CHOICES, activeTag);
+      paint(activeTag);
     });
+    tagRow.appendChild(tagSelect);
 
     // 売上高%が有報に記載されていないエッジ（営業利益等の増減率%しか無いケース）を、
     // 「実データ(DB)」（EDINET DBの実際の売上高から計算）と「逆算」（操業レバレッジを
@@ -5458,25 +5454,20 @@ function setStraightenOn(on) {
     estLabelEl.className = 'filter-label';
     estLabelEl.textContent = '推計方式';
     tagRow.appendChild(estLabelEl);
-    const estChips = {};
-    [
-      { key: '実データ', label: '実データ(DB)', title: '有報に売上高の増減率%が記載されていないエッジは、EDINET DBに記載されている実際の売上高から計算した値を使う（最も信頼できる値）' },
-      { key: '逆算', label: '逆算(推計)', title: '有報に売上高の増減率%が記載されていないエッジは、セグメント売上比率（全社売上×セグメント比率）または操業レバレッジ（前年度の変動費率・固定費を仮定）から売上相当を逆算した値を使う（いずれも推計であり、実際に売上が変化したとは限らない）' },
-    ].forEach(({ key, label, title }) => {
-      const chip = document.createElement('span');
-      chip.className = 'chip' + (key === estimateMethodMode ? ' active' : '');
-      chip.textContent = label;
-      chip.title = title;
-      chip.addEventListener('click', () => {
-        if (estimateMethodMode === key) return;
-        estimateMethodMode = key;
-        invalidateExcludeScoreCache();
-        refreshNodeScoreLabels();
-        build();
-      });
-      estChips[key] = chip;
-      tagRow.appendChild(chip);
+    const EST_METHOD_CHOICES = [
+      ['実データ', '実データ(DB)', '有報に売上高の増減率%が記載されていないエッジは、EDINET DBに記載されている実際の売上高から計算した値を使う（最も信頼できる値）'],
+      ['逆算', '逆算(推計)', '有報に売上高の増減率%が記載されていないエッジは、セグメント売上比率（全社売上×セグメント比率）または操業レバレッジ（前年度の変動費率・固定費を仮定）から売上相当を逆算した値を使う（いずれも推計であり、実際に売上が変化したとは限らない）'],
+    ];
+    const estSelect = document.createElement('select');
+    estSelect.className = 'tag-select';
+    buildTagOptions(estSelect, EST_METHOD_CHOICES, estimateMethodMode);
+    estSelect.addEventListener('change', () => {
+      estimateMethodMode = estSelect.value;
+      invalidateExcludeScoreCache();
+      refreshNodeScoreLabels();
+      build();
     });
+    tagRow.appendChild(estSelect);
 
     paint(activeTag);
     }
