@@ -399,6 +399,9 @@
     padding: 3px 5px; border-radius: 5px; border: 1px solid var(--line-strong);
     background: var(--surface); color: var(--ink);
   }
+  .legend-outer {
+    max-width: 1400px; margin: 14px auto 0; padding: 0 28px 14px;
+  }
   .scenario-info {
     max-width: 1400px; margin: 0 auto; padding: 0 28px;
     font-size: 12.5px; color: var(--ink);
@@ -840,25 +843,27 @@
         <div class="filter-row" id="postFixRow"></div>
         <div class="filter-row" id="visualStyleRow"></div>
       </section>
-
-      <section class="tag-section">
-        <h3 class="tag-section-title">凡例</h3>
-        <div class="filter-row legend-row" id="legendRow">
-          <span class="filter-label">エッジの種類</span>
-          <span class="legend-item"><span class="legend-swatch" style="background:var(--line-strong)"></span>抽出</span>
-          <span class="legend-item"><span class="legend-swatch legend-swatch-dashed"></span>AI推測</span>
-          <span class="legend-item" title="Step1（有報・デフォルトのマクロ経済レポート）で構築した因果ツリーに対し、人がシナリオと参照資料を選んで追加したノード・因果関係（Step2）。該当ノードは枠線もこの色になる"><span class="legend-swatch" style="background:var(--step2)"></span>Step2で追加</span>
-          <span class="filter-label" id="legendNodeSwatchesLabel" style="margin-left:14px;">ノード枠線の色（業種別）</span>
-          <span id="legendNodeSwatches"></span>
-          <span class="filter-label" style="margin-left:14px;">影響度／蓋然性（試験版）</span>
-          <span class="legend-item">
-            <span class="level-legend-swatch" id="legendLevelSwatch"></span>
-            <span style="margin-left:4px;">付与済みノードにマウスオーバーすると表示（1〜4、数字が大きいほど高い）</span>
-          </span>
-        </div>
-      </section>
     </div>
   </header>
+
+  <div class="legend-outer">
+    <section class="tag-section">
+      <h3 class="tag-section-title">凡例</h3>
+      <div class="filter-row legend-row" id="legendRow">
+        <span class="filter-label">エッジの種類</span>
+        <span class="legend-item"><span class="legend-swatch" style="background:var(--line-strong)"></span>抽出</span>
+        <span class="legend-item"><span class="legend-swatch legend-swatch-dashed"></span>AI推測</span>
+        <span class="legend-item" title="Step1（有報・デフォルトのマクロ経済レポート）で構築した因果ツリーに対し、人がシナリオと参照資料を選んで追加したノード・因果関係（Step2）。該当ノードは枠線もこの色になる"><span class="legend-swatch" style="background:var(--step2)"></span>Step2で追加</span>
+        <span class="filter-label" id="legendNodeSwatchesLabel" style="margin-left:14px;">ノード枠線の色（業種別）</span>
+        <span id="legendNodeSwatches"></span>
+        <span class="filter-label" style="margin-left:14px;">影響度／蓋然性（試験版）</span>
+        <span class="legend-item">
+          <span class="level-legend-swatch" id="legendLevelSwatch"></span>
+          <span style="margin-left:4px;">付与済みノードにマウスオーバーすると表示（1〜4、数字が大きいほど高い）</span>
+        </span>
+      </div>
+    </section>
+  </div>
 
   <div class="scenario-info" id="scenarioInfo"><div class="mp-box"><div id="scenarioList"></div><div class="mp-note">影響度×蓋然性が付与済みのノードのみを対象に算出（試験版・現在は一部ノードのみ）。スコア＝経路上の各ノードの（影響度×蓋然性）合計÷ノード数。上位シナリオとノードの重複が指定割合を超える経路は除外して次点を採用。</div><button type="button" id="scenarioExplainerBtn" class="chip" style="align-self:flex-start;">シナリオの求め方を見る ▶</button></div></div>
 
