@@ -1489,12 +1489,21 @@ function setStraightenOn(on) {
     causeHeatmapOverrides.clear();
     causeHeatmapOverridesBySource.clear();
   }
+  // PL合計（plSum）を業種ごとに合算する際の重み。デフォルトは全業種1（＝従来と同じ単純
+  // 合計）。「ツリー構造を変えるタグ」と同じ扱いでスコア計算・シナリオ算出にも反映する。
+  const industryWeights = new Map(); // industry -> weight（未設定（デフォルト）は1として扱う）
+  function getIndustryWeight(industry) {
+    const w = industryWeights.get(industry);
+    return (w != null && isFinite(w)) ? w : 1;
+  }
   // computeExcludeBest・industryBreakdownExcluding・describeNodePlBreakdownの3箇所で
   // 全く同じ「ノードid起点・業種単位（売上高/部門売上はプール）」の直接PL寄与の集計を
   // 行っているため、共通のヘルパーに切り出す。sales タグのヒートマップで編集された値が
   // あれば、実データのトリム平均の代わりにその値を使う（編集していない業種はそのまま
   // 実データを使う）。新規の業種グループを編集だけで作ることはできない（既存の直接エッジが
-  // 1本も無い業種は対象外のまま）。
+  // 1本も無い業種は対象外のまま）。業種ごとの重み（industryWeights）は、業種内のトリム
+  // 平均／編集値を求めた後、業種間で合算する直前に掛ける（単純合計ではなく重み付き合計に
+  // するため）。
   function plContributionsByIndustry(id) {
     const edgesByIndustry = new Map(); // industry -> [edge, ...]（増減率%の記載が無いものも含む）
     (scoreBaseOutAdj.get(id) || []).forEach(e => {
@@ -1510,15 +1519,18 @@ function setStraightenOn(on) {
       edgesByIndustry.get(t.industry).push(e);
     });
     const overridesForId = causeHeatmapOverridesBySource.get(id);
-    const contributions = new Map(); // industry -> { value, edgeList, overridden, n }
+    const contributions = new Map(); // industry -> { value（重み適用後）, rawValue（重み適用前）, weight, edgeList, overridden, n }
     edgesByIndustry.forEach((edgeList, industry) => {
+      const weight = getIndustryWeight(industry);
       if (overridesForId && overridesForId.has(industry)) {
-        contributions.set(industry, { value: Math.abs(overridesForId.get(industry)), edgeList, overridden: true, n: edgeList.length });
+        const rawValue = Math.abs(overridesForId.get(industry));
+        contributions.set(industry, { value: rawValue * weight, rawValue, weight, edgeList, overridden: true, n: edgeList.length });
         return;
       }
       const vals = edgeList.map(e => parseFloat(e.change_pct)).filter(v => isFinite(v)).map(Math.abs);
       if (vals.length === 0) return; // 増減率%の記載が無いエッジしか無い業種は、編集が無い限り寄与ゼロ
-      contributions.set(industry, { value: trimmedMean(vals), edgeList, overridden: false, n: vals.length });
+      const rawValue = trimmedMean(vals);
+      contributions.set(industry, { value: rawValue * weight, rawValue, weight, edgeList, overridden: false, n: vals.length });
     });
     return contributions;
   }
@@ -1794,6 +1806,48 @@ function setStraightenOn(on) {
       refreshAfterStructureChange();
     });
     structureFilterRow.appendChild(chip);
+  });
+
+  // ---- 業種ごとの重み ----
+  // PL合計（plSum）を業種間で合算する際、単純合計ではなく業種ごとの重みを掛けてから
+  // 合算できるようにする（デフォルト1＝従来通りの単純合計）。実体はplContributionsByIndustry
+  // のweight（industryWeights、宣言はこのファイル上部）。
+  const industryWeightLabel = document.createElement('span');
+  industryWeightLabel.className = 'filter-label';
+  industryWeightLabel.textContent = '業種ごとの重み（PL合計を業種間で合算する際の係数）';
+  industryWeightLabel.style.marginLeft = '14px';
+  structureFilterRow.appendChild(industryWeightLabel);
+
+  const industryWeightResetChip = document.createElement('span');
+  industryWeightResetChip.className = 'chip reset';
+  industryWeightResetChip.textContent = '重みを1に戻す';
+  industryWeightResetChip.title = '全業種の重みを1（単純合計）に戻します。';
+  industryWeightResetChip.addEventListener('click', () => {
+    industryWeights.clear();
+    structureFilterRow.querySelectorAll('.industry-weight-input').forEach(inp => { inp.value = '1'; });
+    refreshAfterStructureChange();
+  });
+  structureFilterRow.appendChild(industryWeightResetChip);
+
+  industries.forEach(ind => {
+    const label = document.createElement('label');
+    label.title = `PL合計を業種間で合算する際、「${ind}」業種の寄与（トリム平均または編集値）にこの重みを掛けます（デフォルト1＝単純合計と同じ）。`;
+    label.textContent = ind + ' ';
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.step = '0.1';
+    input.min = '0';
+    input.value = String(getIndustryWeight(ind));
+    input.className = 'industry-weight-input';
+    input.style.width = '48px';
+    input.addEventListener('change', () => {
+      const v = parseFloat(input.value);
+      if (!isFinite(v) || v < 0) { input.value = String(getIndustryWeight(ind)); return; }
+      if (Math.abs(v - 1) < 1e-9) industryWeights.delete(ind); else industryWeights.set(ind, v);
+      refreshAfterStructureChange();
+    });
+    label.appendChild(input);
+    structureFilterRow.appendChild(label);
   });
 
   const postFixRow = document.getElementById('postFixRow');
@@ -2216,7 +2270,7 @@ function setStraightenOn(on) {
     if (excludedNodes.has(id)) return [];
     const rows = [];
     plContributionsByIndustry(id).forEach((info, industry) => {
-      rows.push({ industry, mean: info.value, n: info.n, overridden: info.overridden });
+      rows.push({ industry, mean: info.value, rawMean: info.rawValue, weight: info.weight, n: info.n, overridden: info.overridden });
     });
     rows.sort((a, b) => b.mean - a.mean);
     return rows;
@@ -3480,7 +3534,7 @@ function setStraightenOn(on) {
     // plContributionsByIndustryを共通で使う（ヒートマップの編集値も反映される）。
     const rows = [];
     plContributionsByIndustry(id).forEach((info, industry) => {
-      rows.push({ industry, label: '売上', mean: info.value, n: info.n, overridden: info.overridden });
+      rows.push({ industry, label: '売上', mean: info.value, rawMean: info.rawValue, weight: info.weight, n: info.n, overridden: info.overridden });
     });
     rows.sort((a, b) => b.mean - a.mean);
     return rows;
@@ -3536,7 +3590,11 @@ function setStraightenOn(on) {
     }
     const breakdown = describeNodePlBreakdown(id);
     const plLines = breakdown.length
-      ? breakdown.map(r => `${escapeHtml(r.industry)}/${escapeHtml(r.label)} ${r.mean.toFixed(1)}%${r.overridden ? '（編集値）' : ''}`).join('<br>')
+      ? breakdown.map(r => {
+          const weighted = Math.abs(r.weight - 1) > 1e-9;
+          const base = `${escapeHtml(r.industry)}/${escapeHtml(r.label)} ${r.rawMean.toFixed(1)}%`;
+          return (weighted ? `${base} × 重み${r.weight.toFixed(2)} = ${r.mean.toFixed(1)}%` : base) + (r.overridden ? '（編集値）' : '');
+        }).join('<br>')
       : '（直接PLに繋がる増減率データなし）';
     // 子ノード経由の値は、経路表示上の採用・不採用（entry.choice）に関わらず、
     // 常に「最も重み付けスコアが大きい直接の子ノード1つ」の値がplSumに加算されている
@@ -5412,7 +5470,12 @@ function setStraightenOn(on) {
           const lv = sc.levels[j];
           const entry = lv.entry;
           const plLines = lv.industryBreakdown.length
-            ? lv.industryBreakdown.map(r => `${r.industry}/売上 ${r.mean.toFixed(1)}%（${r.overridden ? '編集値' : r.n + '件'}）`).join('\n')
+            ? lv.industryBreakdown.map(r => {
+                const weighted = Math.abs(r.weight - 1) > 1e-9;
+                const base = `${r.industry}/売上 ${r.rawMean.toFixed(1)}%`;
+                const withWeight = weighted ? `${base} × 重み${r.weight.toFixed(2)} = ${r.mean.toFixed(1)}%` : base;
+                return `${withWeight}（${r.overridden ? '編集値' : r.n + '件'}）`;
+              }).join('\n')
             : '（直接PLに繋がる増減率データなし）';
           const nonZero = (entry.childCandidates || []).filter(c => c.weightedVal > 1e-9);
           let childLine = '（対象となる子ノードなし）';
