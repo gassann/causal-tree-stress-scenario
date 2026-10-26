@@ -106,9 +106,10 @@
   .control-panel {
     display: flex; flex-direction: column; gap: 14px;
     margin-top: 14px;
-    max-height: 2000px;
+    max-height: min(2000px, calc(100vh - 160px));
     opacity: 1;
-    overflow: hidden;
+    overflow-y: auto;
+    overflow-x: hidden;
     transition: max-height 0.28s ease, opacity 0.2s ease, margin-top 0.28s ease;
   }
   .control-panel.collapsed {
@@ -2842,7 +2843,7 @@ function setStraightenOn(on) {
   if (allScoredPaths.length > 0) {
     const scLabel = document.createElement('span');
     scLabel.className = 'filter-label';
-    scLabel.textContent = 'シナリオ分析（試験版）';
+    scLabel.textContent = 'シナリオ分析';
     scenarioRow.appendChild(scLabel);
 
     const countLabel = document.createElement('label');
