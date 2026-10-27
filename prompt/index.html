@@ -1,0 +1,578 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI活用工程記録</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;600;700&family=Noto+Sans+JP:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --bg: #f4f5f7;
+    --surface: #ffffff;
+    --surface-alt: #ebeef2;
+    --ink: #1b2027;
+    --ink-soft: #565e6c;
+    --ink-faint: #848d9c;
+    --line: #dde1e7;
+    --line-strong: #c4cad3;
+    --accent: #2f5d50;
+    --accent-ink: #1f4038;
+    --accent-soft: #e4ede9;
+    --tag-ai: #9a5a1f;
+    --tag-ai-soft: #f6e9da;
+    --shadow: 0 1px 2px rgba(20,24,30,0.04), 0 8px 24px rgba(20,24,30,0.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14171c;
+      --surface: #1b1f26;
+      --surface-alt: #22262e;
+      --ink: #e8eaee;
+      --ink-soft: #abb2bf;
+      --ink-faint: #767e8c;
+      --line: #2c313a;
+      --line-strong: #3a4049;
+      --accent: #6fae9c;
+      --accent-ink: #9accbc;
+      --accent-soft: #223029;
+      --tag-ai: #d6a05c;
+      --tag-ai-soft: #332618;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14171c;
+    --surface: #1b1f26;
+    --surface-alt: #22262e;
+    --ink: #e8eaee;
+    --ink-soft: #abb2bf;
+    --ink-faint: #767e8c;
+    --line: #2c313a;
+    --line-strong: #3a4049;
+    --accent: #6fae9c;
+    --accent-ink: #9accbc;
+    --accent-soft: #223029;
+    --tag-ai: #d6a05c;
+    --tag-ai-soft: #332618;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.35);
+  }
+
+  * { box-sizing: border-box; }
+  html { background: var(--bg); }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Noto Sans JP", "Hiragino Sans", sans-serif;
+    font-size: 15.5px;
+    line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page {
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 56px 16px 96px;
+  }
+  header.doc-head {
+    margin-bottom: 36px;
+  }
+  .doc-head .kicker {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent-ink);
+    margin: 0 0 14px;
+  }
+  h1 {
+    font-family: "Shippori Mincho", serif;
+    font-weight: 700;
+    font-size: clamp(28px, 4.2vw, 38px);
+    line-height: 1.35;
+    margin: 0 0 10px;
+    text-wrap: balance;
+    color: var(--ink);
+  }
+  .doc-head .sub {
+    color: var(--ink-soft);
+    font-size: 15.5px;
+    margin: 0;
+    max-width: 58ch;
+  }
+  .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 18px;
+    margin-top: 18px;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12.5px;
+    color: var(--ink-faint);
+  }
+  .meta-row span b { color: var(--ink-soft); font-weight: 500; }
+
+  .notice {
+    display: flex;
+    gap: 12px;
+    background: var(--surface-alt);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 16px 18px;
+    margin: 28px 0 40px;
+    font-size: 14px;
+    color: var(--ink-soft);
+    line-height: 1.7;
+  }
+  .notice .dot {
+    flex: none;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+    margin-top: 8px;
+  }
+  .notice strong { color: var(--ink); }
+  .notice code {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12.5px;
+    background: var(--accent-soft);
+    color: var(--accent-ink);
+    padding: 1px 5px;
+    border-radius: 4px;
+  }
+
+  h2.section-title {
+    font-family: "Shippori Mincho", serif;
+    font-size: 20px;
+    font-weight: 600;
+    margin: 56px 0 4px;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  h2.section-title .num {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 13px;
+    color: var(--accent-ink);
+    background: var(--accent-soft);
+    border-radius: 6px;
+    padding: 3px 8px;
+    font-weight: 500;
+  }
+  .section-sub {
+    color: var(--ink-faint);
+    font-size: 13.5px;
+    margin: 0 0 18px;
+  }
+
+  /* overview table */
+  .overview {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 28px 0 8px;
+    font-size: 13.8px;
+  }
+  .overview caption {
+    text-align: left;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12px;
+    color: var(--ink-faint);
+    margin-bottom: 8px;
+  }
+  .overview th, .overview td {
+    text-align: left;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  .overview thead th {
+    font-weight: 500;
+    color: var(--ink-faint);
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--line-strong);
+  }
+  .overview tbody tr:hover { background: var(--surface-alt); }
+  .overview td.num, .overview th.num { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; }
+  .wrap-x { overflow-x: auto; }
+
+  .badge {
+    display: inline-block;
+    font-size: 11.5px;
+    font-family: "IBM Plex Mono", monospace;
+    padding: 2px 7px;
+    border-radius: 5px;
+    background: var(--accent-soft);
+    color: var(--accent-ink);
+    white-space: nowrap;
+  }
+  .badge.ai {
+    background: var(--tag-ai-soft);
+    color: var(--tag-ai);
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 24px 26px;
+    box-shadow: var(--shadow);
+    margin-bottom: 18px;
+  }
+  .card .fact-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 14px 24px;
+    margin: 4px 0 20px;
+    padding: 16px 0;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+  }
+  .fact-grid dt {
+    font-size: 11.5px;
+    color: var(--ink-faint);
+    letter-spacing: 0.03em;
+    margin-bottom: 4px;
+  }
+  .fact-grid dd {
+    margin: 0;
+    font-size: 14px;
+    color: var(--ink);
+  }
+  .fact-grid dd.files {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12px;
+    line-height: 1.9;
+    color: var(--ink-soft);
+    word-break: break-all;
+  }
+
+  p.body-text { margin: 0 0 16px; color: var(--ink-soft); }
+  p.body-text:last-of-type { margin-bottom: 0; }
+  p.body-text strong { color: var(--ink); font-weight: 600; }
+
+  .prompt-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--ink-faint);
+    margin: 22px 0 8px;
+  }
+  .prompt-label::before {
+    content: "";
+    flex: none;
+    width: 14px; height: 1px;
+    background: var(--line-strong);
+  }
+  blockquote.prompt {
+    margin: 0 0 16px;
+    padding: 16px 18px;
+    background: var(--surface-alt);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 8px 8px 0;
+    font-size: 13.6px;
+    line-height: 1.85;
+    color: var(--ink);
+    white-space: pre-wrap;
+  }
+  .note-line {
+    font-size: 12.8px;
+    color: var(--ink-faint);
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px dashed var(--line);
+  }
+  .note-line strong { color: var(--ink-soft); }
+
+  footer.doc-foot {
+    margin-top: 64px;
+    padding-top: 20px;
+    border-top: 1px solid var(--line);
+    font-size: 12.5px;
+    color: var(--ink-faint);
+  }
+
+  @media (max-width: 560px) {
+    .page { padding: 40px 16px 72px; }
+    .card { padding: 20px 18px; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="doc-head">
+    <p class="kicker">因果ツリー構築工程 / 社内記録</p>
+    <h1>AI活用工程記録</h1>
+    <p class="sub">ホルムズ海峡封鎖ストレスシナリオの因果ツリーを構築する過程で、どの工程でAIを使い、何を判断させたかをまとめたもの。</p>
+    <div class="meta-row">
+      <span><b>対象データ</b>　因果データベース.csv（全11,437行）</span>
+      <span><b>対象ツリー</b>　因果ツリー.html</span>
+      <span><b>作成</b>　2026-10-22</span>
+    </div>
+  </header>
+
+  <div class="notice">
+    <span class="dot"></span>
+    <div>
+      <strong>このドキュメントの性質について。</strong>
+      実際に使った一言一句そのままのプロンプトは、過去の複数の作業セッションでの都度のやり取りで、ログとして別途保存していなかったため残っていない。
+      以下のプロンプトは、各工程で実際に出力されたデータの構造・列・判断基準から当時の指示内容を再現した上で、単体でも機能するように必要な添付情報・判断基準・出力形式を補って書き直したもの。
+      工程の区分・対象ファイル・件数は、現在のCSVファイルを実際に集計した値。
+      文中の <code>[ ]</code> は、ファイルパスや対象データなど、使用時にご自身の環境の値へ置き換える箇所。
+    </div>
+  </div>
+
+  <table class="overview wrap-x">
+    <caption>工程全体の見取り図</caption>
+    <thead>
+      <tr><th>工程</th><th>AIの役割</th><th class="num">件数</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>① 有報・レポートからの抽出</td><td>原文を読み、因果関係を構造化</td><td class="num">約11,346行</td></tr>
+      <tr><td>② AI推測による因果関係（エッジ）の追加</td><td>既存ノード間を出典文書なしで推論してつなぐ</td><td class="num">91行</td></tr>
+      <tr><td>③ 増減率(%)の推計</td><td>増減の方向のみ記載の箇所を操業レバレッジモデルで逆算</td><td class="num">97行</td></tr>
+      <tr><td>④ 蓋然性等の評価付与</td><td>評価値と根拠文をAIが判断・記述</td><td class="num">評価ファイル3種</td></tr>
+      <tr><td>⑤ Step2：追加資料によるツリー拡充</td><td>追加資料を読み既存ツリーへ統合</td><td class="num">280行</td></tr>
+      <tr><td>⑥ 名寄せの設計</td><td>全ラベルの名寄せ（原因・結果ラベルの正本化）</td><td class="num">表記→ラベル対応表</td></tr>
+    </tbody>
+  </table>
+
+  <!-- 1 -->
+  <h2 class="section-title"><span class="num">01</span>有報・レポートからの因果関係抽出</h2>
+  <p class="section-sub">原文に明記されている内容をAIが読み取り、構造化データに変換する工程。因果関係自体の根拠は元の文書にある。</p>
+  <div class="card">
+    <dl class="fact-grid">
+      <div><dt>対象</dt><dd>有価証券報告書・決算短信・経済レポート（みずほ・大和・経産省資源エネルギー庁等）</dd></div>
+      <div><dt>件数</dt><dd>企業個別 7,251行／社会・経済事象 4,095行</dd></div>
+      <div><dt>対象ファイル</dt><dd class="files">因果データベース_batch_yuho_*.csv<br>因果データベース_batch_mizuho.csv<br>因果データベース_batch_daiwa_*.csv<br>因果データベース_batch_tanshin.csv<br>因果データベース_batch_report260421.csv</dd></div>
+    </dl>
+    <p class="body-text">対象文書のテキストから「原因となる出来事」と「結果として起きたこと（財務・事業への影響、または別の社会・経済事象）」の組を、1組につき1行として全て抜き出す作業。経済レポートについては、企業のPL/BSに直結する影響だけでなく、「原油価格の高騰→国内の最終財価格の押し上げ」のような、事象から事象への中間的な連鎖も対象に含める。原文にPL関連の増減率(%)が数値で明記されている場合はその数値をそのまま転記する（増減率(%)が入っている5,866行のうち5,645行がこの原文からの直接転記で、残りが③の推計工程によるもの）。ラベルの正規化（簡潔な名詞句化）、PL/BS勘定科目かどうかの判定、社会・経済事象か企業個別事象かの分類もこの工程でAIが行っている。</p>
+    <p class="prompt-label">そのまま使えるプロンプト（[ ]内を書き換える）</p>
+    <blockquote class="prompt">あなたは有報・決算短信・経済レポートから「原因→結果」の因果関係を抽出し、構造化データ（CSV）に変換する作業を行います。
+
+【入力】
+・対象文書：[対象の有報・決算短信・レポートのファイル名またはURL]
+・既存ラベル語彙：[因果ノード一覧.csvを添付。原因ラベル・結果ラベルの既存一覧として使う]
+・PL/BS判定ルール：[pl_bs_classifier.pyを添付。勘定科目判定のキーワード基準として使う]
+
+【作業内容】
+対象文書のテキストから、「原因となる出来事」と「結果として起きたこと」の組を全て抜き出してください。「結果」は、企業の財務・事業への影響に限らず、別の社会・経済事象（例：原油価格の高騰→国内の最終財価格の押し上げ、のような事象間の中間的な連鎖）も対象に含めてください。特に経済レポートが対象の場合、企業の財務影響に至る手前の中間的な連鎖を省略しないでください。
+
+【ルール】
+1. 原因ラベル・結果ラベルは、まず添付した既存ラベル語彙に意味が同じものがないか確認し、あれば必ずそれを使う。無い場合のみ、簡潔な名詞句で新規ラベルを作る。
+2. 結果ラベルが添付したPL/BS判定ルールのキーワードに該当する場合、業種列には会社の業種（[化学/海運業/空運業/不動産業/輸送用機器/陸運業]のいずれか。該当しない場合は「全般」）を入れる。
+3. 増減率(%)は悪化方向をマイナス、改善方向をプラスで統一する。
+4. 原文にPL関連の増減率(%)が数値で明記されている場合は、その数値をそのまま増減率(%)列に転記する（符号は上のルール3の通り統一）。この場合、増減率推測フラグは空欄のままとする（推測フラグは、原文に記載が無く別工程で推計した場合にのみ使う）。原文に記載が無い場合、増減率(%)列は空欄のままでよい。
+5. 分類列は「社会・経済事象」（マクロ・業界共通の出来事）か「企業個別」（個社固有の事業要因）のいずれかを選ぶ。
+6. 原文に明記されている因果関係のみを対象とし、推測は含めない。
+7. 原因と結果の境界が不明確で1行に整理できない場合は、無理に出力せず「要確認」として別途報告する。
+
+【出力形式】
+ヘッダー行を含むCSV形式で、次の列を持つ1組1行のCSV行として出力してください。「全社換算増減率(%)」列は、この工程では空欄のままでよい（部門単位の値を会社全体換算する作業は増減率推計の工程で別途行う）。
+
+業種／会社名／出典ファイル／原因／結果／原因ラベル／結果ラベル／増減率(%)／増減率推測フラグ／PL/BSフラグ／分類(社会・経済事象or企業個別)／原文／全社換算増減率(%)</blockquote>
+    <p class="note-line"><strong>判断の性質：</strong>因果関係そのものの根拠は原文にある。AIが行っているのは「読み取り・要約・ラベルの正規化・分類」であり、因果関係の発見ではない。</p>
+  </div>
+
+  <!-- 2 -->
+  <h2 class="section-title"><span class="num">02</span>AI推測による因果関係（エッジ）の追加</h2>
+  <p class="section-sub">新しいノードを作るのではなく、既存ツリーのノード同士のうち、まだエッジで直接つながっていない組み合わせを見て、その間の因果関係をAIが一般的な経済知識から推論し、エッジとして追加する工程。</p>
+  <div class="card">
+    <dl class="fact-grid">
+      <div><dt>対象</dt><dd>既存ツリーのノード同士のうち、出典資料にはまだエッジとして明記されていない組み合わせ</dd></div>
+      <div><dt>件数</dt><dd>91行（分類列＝「AI推測」）。うち86行（約95%）は原因ラベル・結果ラベルの両方が既存ツリーに元々あるラベル（残り5行は、既存ノードの間を新規の中間ラベル1つで橋渡ししたもの。下記プロンプトでは単体利用時の分かりやすさを優先し、このパターンは対象外とし常に既存ラベルのみを使う形にしている）</dd></div>
+      <div><dt>対象ファイル</dt><dd class="files">因果データベース_batch_ai_inferred_1.csv<br>因果データベース_batch_ai_inferred_3.csv<br>因果データベース_batch_ai_inferred_hormuz.csv</dd></div>
+    </dl>
+    <p class="body-text">例：「女性労働参加率の頭打ち → 人手不足の深刻化」のように、どちらも既存ツリーに元々あるノードだが、両者をつなぐエッジは個別の文書には書かれていない、という組み合わせに、一般論として成立する因果関係をエッジとして追加している。このカテゴリは会社名列が「AI推測」、分類列が「AI推測」で明示的にタグ付けされており、ツリー側のフィルターで表示・非表示を切り替えられる。</p>
+    <p class="prompt-label">そのまま使えるプロンプト（[ ]内を書き換える）</p>
+    <blockquote class="prompt">あなたは既存の因果ツリーのノード同士のうち、まだエッジでつながっていないが、一般的な経済知識から見て因果関係があると考えられる組み合わせを見つけ、推測のエッジとして追加候補にする作業を行います。新しいノード（概念）を作ることが目的ではなく、既存のノードとノードの間を推測でつなぐことが目的です。
+
+【入力】
+・既存ノード一覧：[因果ノード一覧.csvを添付]
+・既存のエッジ一覧：[因果エッジ一覧.csvを添付。すでにどのノード間がつながっているかの確認に使う]
+・既存のAI推測の例：[因果データベース.csvの分類列が「AI推測」の行を抜粋して添付。粒度・トーンの参考にする]
+
+【作業内容】
+添付した既存ノード一覧の中から、まだ添付した既存エッジ一覧に無い組み合わせで、一方が他方の原因（または結果）になると合理的に推測できるものを探してください。件数の上限は設けないので、確信度の基準（下のルール2）を満たす候補をあなた自身の判断で挙げられるだけ挙げてください。
+
+原因・結果のどちらのラベルも、必ず添付した既存ノード一覧にあるものを使ってください。新しいラベル（既存ノード一覧に無い概念）は作らないでください。
+
+【ルール】
+1. 原因・結果の両方とも添付した既存エッジ一覧にすでに存在する組み合わせは提案しない（重複登録を避けるため）。
+2. 確信度が「低」のものは提案しない。
+3. 1件ごとに、なぜその因果関係が成立すると考えるかを原文列に明記する。出典文書が無い前提なので、一般論・経済合理性に基づく説明にする。
+4. 添付した既存のAI推測の例と同程度の粒度・具体性に揃える。
+
+【出力】
+候補ごとに1行のCSV行として、次の列を出力してください。
+
+業種／会社名（固定で「AI推測」）／出典ファイル（空欄）／原因／結果／原因ラベル／結果ラベル／分類（固定で「AI推測」）／原文（推測の根拠となる一般論を1〜2文で記述）／確信度（高・中・低）</blockquote>
+    <p class="note-line"><strong>判断の性質：</strong>因果関係（エッジ）自体がAIの推論の産物。出典文書による裏付けはない。ツリー上で最も「AIの判断に依存する」カテゴリ。ただしノード（概念）は既存のものだけを使っており、AIが新しい概念を持ち込むことはない。</p>
+  </div>
+
+  <!-- 3 -->
+  <h2 class="section-title"><span class="num">03</span>増減率(%)の推計</h2>
+  <p class="section-sub">有報にPL項目の増減（方向）の記載はあるが、具体的な増減率(%)の数値が記載されていない場合に、AIに有報本文を読んでもらい増減率(%)を大まかに推測してもらう工程。操業レバレッジモデルのような数式計算は行わず、AIへの依頼は文脈からの概算推測のみ。</p>
+  <div class="card">
+    <dl class="fact-grid">
+      <div><dt>対象</dt><dd>結果が確定PL項目で、有報に増減の方向（増加・減少）は記載されているが、増減率(%)の数値が記載されていないエッジ</dd></div>
+      <div><dt>件数</dt><dd><span class="badge">逆算 97行</span>（「実データ(DB)」はEDINET DBの実数値をそのまま計算するだけで、AIによる推測ではないためこの工程の対象外）</dd></div>
+      <div><dt>対象列</dt><dd class="files">因果データベース.csv / 増減率推測フラグ<br>全社換算増減率(%)</dd></div>
+    </dl>
+    <p class="body-text">有報本文には「営業利益は減少した」のように増減の方向だけが書かれていて、具体的な増減率(%)が書かれていないことがある。この場合に、AIに有報本文を読んでもらい、増減率(%)を大まかに推測してもらっている（操業レバレッジモデルなどの数式計算は行わず、文脈からの概算推測のみ）。部門（セグメント）単位の値を会社全体換算する「全社換算増減率(%)」列への按分も、この工程で行っている（最初のツリー作成時点では行っておらず、後からStep2の拡充作業の中で追加した処理。現時点で値が入っているのは51行で、すべて由来列が「Step2」）。</p>
+    <p class="prompt-label">そのまま使えるプロンプト（[ ]内を書き換える）</p>
+    <blockquote class="prompt">あなたは、有報にPL項目（結果が確定PL項目）の増減の方向は記載されているが、具体的な増減率(%)が記載されていない因果関係について、文脈から増減率(%)を大まかに推測する作業を行います。厳密なモデル計算は不要です。
+
+【入力】
+・対象エッジ：原因ラベル＝[ ]／結果ラベル＝[ ]／会社名＝[ ]
+・有報本文（増減の方向が記載されている該当箇所）：[該当箇所を添付]
+・セグメント売上シェア：[全社換算が必要な場合、セグメント比率データを添付。不要なら「不要」と記入]
+
+【作業内容】
+添付した有報本文を読み、PL項目の増減率(%)を文脈から大まかに推測してください（文中の表現の強さ・前後の記述などから、妥当と考えられる概算値を挙げる。厳密なモデル計算は不要）。
+
+部門（セグメント）単位の増減率で会社全体換算が必要な場合は、添付したセグメント売上シェアで按分した値を「全社換算増減率(%)」列に入れてください。
+
+【出力】
+増減率(%)（符号付き、概算）／増減率推測フラグ（固定で「逆算」）／全社換算増減率(%)（必要な場合のみ）／推測の根拠（本文のどの表現からその数値を推測したか）</blockquote>
+    <p class="note-line"><strong>判断の性質：</strong>AIが有報本文の文脈から大まかに見積もった概算値。数式モデルによる裏付けはなく、仮定への依存度が高い推計。ツリー上では「※逆算」の注記で表示される。</p>
+  </div>
+
+  <!-- 4 -->
+  <h2 class="section-title"><span class="num">04</span>蓋然性の評価付与</h2>
+  <p class="section-sub">ホルムズ海峡封鎖シナリオの各ノード・エッジに、AIが蓋然性の評価値と根拠文を付与する工程。第三者データや客観的な採点基準に基づくものではない。</p>
+  <div class="card">
+    <dl class="fact-grid">
+      <div><dt>対象</dt><dd>ホルムズ海峡封鎖ツリー配下のノード・エッジ</dd></div>
+      <div><dt>評価項目</dt><dd>蓋然性(1-4・10段階)</dd></div>
+      <div><dt>対象ファイル</dt><dd class="files">ホルムズ海峡封鎖_ノード影響度蓋然性.csv<br>ホルムズ海峡封鎖_エッジ蓋然性.csv</dd></div>
+    </dl>
+    <p class="body-text">各評価値には、なぜその値にしたかを説明する根拠文（蓋然性根拠列）が必ず付いている。例えば「ホルムズ海峡封鎖」の蓋然性が1（最も低い）とされているのは、「史上、海峡の航行が完全停止した前例が存在しない」という歴史的事実に基づくAIの説明による。</p>
+    <p class="prompt-label">そのまま使えるプロンプト（[ ]内を書き換える）</p>
+    <blockquote class="prompt">あなたは、ホルムズ海峡封鎖シナリオの因果ツリーの各ノード・エッジに、蓋然性の評価を付与する作業を行います。
+
+【入力】
+・評価対象：[ノードのラベル・業種、またはエッジの原因ラベル／結果ラベルを記入。ノードの評価かエッジの評価かを明記する]
+
+【評価基準（アンカー定義）】
+評価対象がノード（単一の事象）かエッジ（原因→結果の因果関係）かで、問うべき内容が異なります。該当する方の定義を使ってください。
+
+■ ノードの蓋然性＝その事象自体がどれくらいの頻度・確度で起きるか
+・4＝頻繁に発生している、または構造的に高い
+  例：「米国株安」→ 株式市場の調整は年に複数回規模で発生する日常的な市場現象であり、外部要因があればほぼ毎年何らかの調整局面が観測されるため4。
+・3＝過去に複数回の実例がある
+  例：「LNG価格の高騰」→ 2022年のウクライナ危機時に実際にLNG価格が急騰した実例があり、エネルギー価格の急変動は数年に1度のペースで発生する現象であるため3。
+・2＝過去に実例は少ないが機構的にあり得る
+  例：「原油の供給不安の高まり」→ 湾岸危機、イラン核合意破棄、紅海危機など供給不安が高まる局面は過去数十年で複数回発生しているが、常時起きているわけではなく特定の地政学イベントに紐づくため2。
+・1＝史上前例がない、または極めて特殊な条件が必要
+  例：「ホルムズ海峡封鎖」→「封鎖の脅威」自体は繰り返し語られてきたが、実際にタンカー航行が完全停止した前例は史上存在しない（1980年代のタンカー戦争時も海峡は開いたまま）ため1。
+
+■ エッジの蓋然性＝原因が実際に起きた場合に、その結果へどれだけ確実・直接的に波及するか（結果が起きる頻度ではない）
+・4＝原因が起きればほぼ機械的・直結的に結果へ反映される
+  例：「LNG価格の高騰 → 電力・ガス料金の上昇」→ LNGは火力発電・都市ガスの主要原料であり、調達価格の上昇はコストにほぼ機械的に反映されるため4。
+・3＝多くの場合反映されるが、他の要因や判断にも左右される
+  例：「インフレ加速 → 主要中央銀行の利上げ観測の強まり」→ インフレ加速は中央銀行の反応関数として利上げ観測を強めやすいが、既存の政策スタンスや他指標との総合判断に依存するため3。
+・2＝関連はあるが効果が間接的・限定的
+  例：「タンカーの航路変更・迂回（喜望峰迂回等） → 船舶関連製品需要の増加」→ 迂回に伴う燃料・資材需要の増加はあり得るが、効果は限定的・間接的で確度は低いため2。
+・1＝理論上あり得るが、実際に波及する確度は低い
+
+【作業内容】
+1. まず対象について、類似の過去事例（具体的な年・出来事名）を思い出す。見つからなければ「前例が無い」こと自体を根拠にする。
+2. 評価対象がノードかエッジかを確認し、該当する方のアンカー定義に照らして、1〜4のどの帯に当てはまるか判断する。
+3. 根拠文を書く。上の例と同程度に、具体的な年・出来事名・数値などの裏付けとなる事実を最低1つ含めること（「〜と考えられる」のような曖昧な理由だけでは不可）。
+
+【出力】
+蓋然性(1-4)／蓋然性根拠
+
+【ルール】
+1. 根拠文には、統計・過去の実例など具体的な事実を最低1つ含める。</blockquote>
+    <p class="note-line"><strong>判断の性質：</strong>評価値・根拠文ともにAIの定性判断。社内の採点基準やリスク管理部門の承認を経たものではなく、あくまで試験的な評価という位置づけ。</p>
+  </div>
+
+  <!-- 5 -->
+  <h2 class="section-title"><span class="num">05</span>Step2：追加資料によるツリー拡充</h2>
+  <p class="section-sub">人が追加資料を選び、その資料をAIが読んで既存ツリーに統合する工程。①と同じ「読み取り」作業だが、どの資料を使うかは人が判断している。</p>
+  <div class="card">
+    <dl class="fact-grid">
+      <div><dt>対象</dt><dd>ホルムズ海峡封鎖ツリーへの追加リサーチ資料</dd></div>
+      <div><dt>件数</dt><dd>280行（因果データベース.csvの「由来」列＝Step2）</dd></div>
+      <div><dt>対象ファイル</dt><dd class="files">因果データベース_batch_step2_hormuz_oil_enrichment.csv<br>因果データベース_batch_step2_hormuz_oil_enrichment_industries.csv<br>因果データベース_batch_step2_hormuz_oil_enrichment_fulltree.csv<br>因果データベース_batch_step2_hormuz_profit_backfill.csv</dd></div>
+    </dl>
+    <p class="body-text">Step2由来の行はツリー上で新規追加ノード・エッジとして視覚的に区別される。ファイル名に"step2"を含むバッチは、マージ時（merge_causal_batches.py）に自動で「由来」列へ"Step2"が記録される。部門単位の増減率を会社全体換算する「全社換算増減率(%)」列（工程③参照）も、このStep2の作業の中で初めて使われるようになったもので、最初のツリー作成時点の①のバッチでは使っていない。</p>
+    <p class="prompt-label">そのまま使えるプロンプト（[ ]内を書き換える）</p>
+    <blockquote class="prompt">あなたは、既存のホルムズ海峡封鎖の因果ツリーに、追加のリサーチ資料から新たな因果関係を統合する作業を行います。
+
+【入力】
+・既存ツリーの全ノード一覧：[因果ノード一覧.csvのうち、ホルムズ海峡封鎖ツリーに属する部分を添付]
+・追加資料：[追加資料のファイル名、該当ページ・章を記入。全文ではなく関連箇所に絞って添付]
+
+【作業内容】
+1. まず追加資料を読み、既存ツリーのどのノードと関連する内容かを特定する。
+2. 関連するノードを起点（または終点）として、追加資料に明記されている因果関係を抜き出す。
+3. 既存ノードと表記が違うだけで同じ内容を指す場合は、既存のラベル名に合わせる。新規ラベルは、既存ツリーに本当に存在しない場合のみ作る。
+
+出力する列は工程①と同じ形式とする。「由来」列は空欄でよい（マージ時に自動でStep2フラグが付与される）。
+
+【出力】
+業種／会社名／出典ファイル／原因／結果／原因ラベル／結果ラベル／増減率(%)／分類／原文／関連する既存ノード（どのノードと接続するか）</blockquote>
+    <p class="note-line"><strong>判断の性質：</strong>①と同じ「原文に基づく読み取り」。AIの推論ではなく、追加資料という根拠がある。</p>
+  </div>
+
+  <!-- 6 -->
+  <h2 class="section-title"><span class="num">06</span>（補助工程）名寄せの設計</h2>
+  <p class="section-sub">個々のデータ行に対する判断ではなく、データ全体を見て適用する「ルール」自体をAIが設計する工程。原因ラベル・結果ラベルは、各行の原因・結果（自由記述の文言）を名寄せした結果そのもの（名寄せ語）であり、「すでにあるラベルの表記ゆれを後から直す」のではなく、「同じ内容を指す原因・結果に、共通の名寄せ語＝ラベルを与える」作業。一度設計すれば、以降はプログラム（スクリプト）が機械的に適用する。</p>
+  <div class="card">
+    <dl class="fact-grid">
+      <div><dt>対象</dt><dd>因果データベース全体の原因・結果の名寄せ（＝原因ラベル・結果ラベルの確定）</dd></div>
+      <div><dt>対象ファイル</dt><dd class="files">build_node_edge_tables.py（LABEL_SYNONYMS）</dd></div>
+    </dl>
+    <p class="body-text">原因ラベル・結果ラベルは、同じ内容を指す原因・結果（例：「住宅取得マインドの慎重化」「住宅取得意欲の低下」）に与えた共通の名寄せ語そのものであり、この工程の目的はこの名寄せ語（＝原因ラベル・結果ラベル）を確定させること。設計後はプログラムが全行に対して機械的・決定論的に適用するため、ここから先はAIの都度の判断は入らない。</p>
+    <p class="prompt-label">そのまま使えるプロンプト（[ ]内を書き換える）</p>
+    <blockquote class="prompt">あなたは、因果データベース全体で、同じ内容を指す原因・結果に共通の名寄せ語（原因ラベル・結果ラベル）を与えて統合する作業を行います。
+
+【入力】
+・因果データベース：[因果データベース.csvを添付]
+
+【統合すべき表記ゆれのパターン（実例）】
+以下のようなパターンで、表記は違うが同じ内容を指しているものを探してください。
+
+・程度・心理表現の言い換え
+  「住宅取得マインドの慎重化」「住宅取得意欲の低下」「住宅購入意欲の低下」→ 統合先「住宅取得マインドの低迷」
+・同義語への言い換え
+  「コストアップ」→ 統合先「コスト増加」
+・不要な補足・括弧書きの有無
+  「原材料価格上昇（鉄スクラップ）」→ 統合先「原材料価格上昇」（対象を限定する補足だけが違い、事象としては同じ）
+・能動／受動、動詞／名詞など文法的な言い換え
+  「価格転嫁の実施」→ 統合先「製品への価格転嫁」
+・類義語（悪化・抑制など方向は同じだが語が違う）
+  「個人消費の悪化」→ 統合先「個人消費の抑制」
+・同じ対象を指す表現のバリエーション（5〜6通りのゆれが1つに集約される例）
+  「円安の進行」「円安の影響」「急速な円安（為替）」「記録的な円安」「為替の円安推移」→ 統合先「円安（為替）」
+  「インバウンド需要の増加」「インバウンドの増加」「インバウンド来場者数の増加」「インバウンド需要の伸び」「インバウンド需要の堅調な推移」→ 統合先「インバウンド需要の回復」
+  「中国の景気の足踏み」「中国の景気減速」「中国経済の落ち込み」→ 統合先「中国経済の低迷」
+
+【統合してはいけないパターン（実例）】
+意味が近く見えても、粒度や対象が異なる場合は別のラベルのまま残してください。
+  「売上高増加」と「部門売上増加」→ 統合しない（前者は会社全体の売上、後者は特定セグメント・部門の売上で、粒度が異なるため別概念として扱う。「売上高減少」と「部門売上減少」も同様）
+
+【作業内容】
+1. 添付した因果データベースの原因・結果の表記を一覧化する。
+2. 上の「統合すべき表記ゆれのパターン」を手がかりに、表記は違うが同じ内容を指す組をすべて見つける。
+3. 「統合してはいけないパターン」のように、粒度や対象が異なるだけで意味は別物のものは統合しない。
+4. 統合すると判断した組には、共通の名寄せ語（原因ラベル・結果ラベルとして使う語）を与える。名寄せ語は、すでにツリーでより広く使われている、またはより一般的な表現を正本として選ぶ。
+
+【出力】
+原因・結果の表記ごとに割り当てる原因ラベル・結果ラベルの対応表（表記 → ラベル。表記が違っても同じ内容を指す場合は同じラベルを割り当てる）</blockquote>
+    <p class="note-line"><strong>判断の性質：</strong>一度限りのルール設計作業。以後は決定論的なプログラムが適用するため、個々の行の判断にAIは介在しない。</p>
+  </div>
+
+  <footer class="doc-foot">
+    因果データベース.csv（全11,437行）・各種Step2バッチ・評価用CSV3種を集計して作成。工程区分とデータ件数は現物のファイルに基づく。プロンプトは、過去の実際のやり取りを再現した上で単体でも機能するように必要な情報を補ったもの（逐語的な記録ではない）。[ ]内はご自身の環境のファイルパス等に置き換えて使用すること。
+  </footer>
+
+</div>
+</body>
+</html>
