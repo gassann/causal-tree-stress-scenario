@@ -911,6 +911,13 @@
           </button>
         </h3>
         <div id="adminTagBody">
+          <div class="filter-row legend-row" id="adminLegendRow">
+            <span class="filter-label">影響度／蓋然性</span>
+            <span class="legend-item">
+              <span class="level-legend-swatch" id="legendLevelSwatch"></span>
+              <span style="margin-left:4px;">付与済みノードにマウスオーバーすると表示（1〜4、数字が大きいほど高い）。「マトリクス」タブで使用</span>
+            </span>
+          </div>
           <div class="filter-row" id="filterRow"></div>
           <div class="filter-row" id="industryExcludeRow"></div>
           <div class="filter-row" id="adminMiscRow"></div>
@@ -929,11 +936,6 @@
         <span class="legend-item" title="Step1（有報・デフォルトのマクロ経済レポート）で構築した因果ツリーに対し、人がシナリオと参照資料を選んで追加したノード・因果関係（Step2）。該当ノードは枠線もこの色になる"><span class="legend-swatch" style="background:var(--step2)"></span>Step2で追加</span>
         <span class="filter-label" id="legendNodeSwatchesLabel" style="margin-left:14px;">ノード枠線の色（業種別）</span>
         <span id="legendNodeSwatches"></span>
-        <span class="filter-label" style="margin-left:14px;">影響度／蓋然性</span>
-        <span class="legend-item">
-          <span class="level-legend-swatch" id="legendLevelSwatch"></span>
-          <span style="margin-left:4px;">付与済みノードにマウスオーバーすると表示（1〜4、数字が大きいほど高い）</span>
-        </span>
       </div>
     </section>
   </div>
