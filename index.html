@@ -877,7 +877,7 @@
         <span class="legend-item" title="Step1（有報・デフォルトのマクロ経済レポート）で構築した因果ツリーに対し、人がシナリオと参照資料を選んで追加したノード・因果関係（Step2）。該当ノードは枠線もこの色になる"><span class="legend-swatch" style="background:var(--step2)"></span>Step2で追加</span>
         <span class="filter-label" id="legendNodeSwatchesLabel" style="margin-left:14px;">ノード枠線の色（業種別）</span>
         <span id="legendNodeSwatches"></span>
-        <span class="filter-label" style="margin-left:14px;">影響度／蓋然性（試験版）</span>
+        <span class="filter-label" style="margin-left:14px;">影響度／蓋然性</span>
         <span class="legend-item">
           <span class="level-legend-swatch" id="legendLevelSwatch"></span>
           <span style="margin-left:4px;">付与済みノードにマウスオーバーすると表示（1〜4、数字が大きいほど高い）</span>
@@ -886,7 +886,7 @@
     </section>
   </div>
 
-  <div class="scenario-info" id="scenarioInfo"><div class="mp-box"><div id="scenarioList"></div><div class="mp-note">影響度×蓋然性が付与済みのノードのみを対象に算出（試験版・現在は一部ノードのみ）。スコア＝経路上の各ノードの（影響度×蓋然性）合計÷ノード数。上位シナリオとノードの重複が指定割合を超える経路は除外して次点を採用。</div><button type="button" id="scenarioExplainerBtn" class="chip" style="align-self:flex-start;">シナリオの求め方を見る ▶</button></div></div>
+  <div class="scenario-info" id="scenarioInfo"><div class="mp-box"><div id="scenarioList"></div><div class="mp-note">影響度×蓋然性が付与済みのノードのみを対象に算出（現在は一部ノードのみ）。スコア＝経路上の各ノードの（影響度×蓋然性）合計÷ノード数。上位シナリオとノードの重複が指定割合を超える経路は除外して次点を採用。</div><button type="button" id="scenarioExplainerBtn" class="chip" style="align-self:flex-start;">シナリオの求め方を見る ▶</button></div></div>
 
   <section id="isolationPanel" class="isolation-panel" style="display:none;">
     <div class="isolation-panel-head">
@@ -2820,7 +2820,7 @@ function setStraightenOn(on) {
     pmLabel.textContent = '蓋然性の算出元';
     const PROBABILITY_MODE_CHOICES = [
       ['node', 'ノードの蓋然性', '結果ノード自身に割り振られた蓋然性(1-4)を使って重み付けします。同じ結果ノードであれば、原因が何であっても同じ重みになります。'],
-      ['edge', 'エッジの蓋然性', '原因→結果の個々のエッジに割り振られた蓋然性(1-4)を使って重み付けします（デフォルト）。「結果が起こる確率は原因によって異なる」という考え方で、同じ結果ノードでも原因ごとに異なる重みを使えます（試験版・エッジ蓋然性が未設定の場合は1.0として扱います。PL勘定科目に繋がるエッジは結果が確定事象として扱われるため対象外です）。'],
+      ['edge', 'エッジの蓋然性', '原因→結果の個々のエッジに割り振られた蓋然性(1-4)を使って重み付けします（デフォルト）。「結果が起こる確率は原因によって異なる」という考え方で、同じ結果ノードでも原因ごとに異なる重みを使えます（エッジ蓋然性が未設定の場合は1.0として扱います。PL勘定科目に繋がるエッジは結果が確定事象として扱われるため対象外です）。'],
     ];
     const probModeSelect = document.createElement('select');
     probModeSelect.className = 'tag-select';
@@ -2903,7 +2903,7 @@ function setStraightenOn(on) {
     const scenarioToggleChip = document.createElement('span');
     scenarioToggleChip.className = 'chip';
     scenarioToggleChip.textContent = '表示';
-    scenarioToggleChip.title = '影響度×蓋然性が付与済みのノードの中から、スコア上位かつ互いのノード重複が指定割合以下となる経路を複数ハイライトします（試験版・一部ノードのみ対象）。';
+    scenarioToggleChip.title = '影響度×蓋然性が付与済みのノードの中から、スコア上位かつ互いのノード重複が指定割合以下となる経路を複数ハイライトします（一部ノードのみ対象）。';
     scenarioToggleChip.addEventListener('click', () => {
       scenariosShown = !scenariosShown;
       scenarioToggleChip.classList.toggle('active', scenariosShown);
@@ -3568,7 +3568,7 @@ function setStraightenOn(on) {
       // 影響度×蓋然性／マトリクス色ゾーンは、ノード自身に影響度(1-4)が設定されている
       // ことが前提（下流に評価済みノードがあっても代わりにはならない）。
       if (!scoredIds.has(id)) {
-        return header + '<div class="tt-cr">影響度・蓋然性が未設定のため、スコア計算（試験版・一部ノードのみ対象）の対象外です。</div>';
+        return header + '<div class="tt-cr">影響度・蓋然性が未設定のため、スコア計算（一部ノードのみ対象）の対象外です。</div>';
       }
       const score = nodeScore(id);
       const maxLabel = scoreMode === 'zone' ? '最大4点' : '最大16点';
@@ -4039,7 +4039,7 @@ function setStraightenOn(on) {
     });
     const title = document.createElement('div');
     title.className = 'risk-matrix-title';
-    title.textContent = `AI推測影響度×蓋然性マトリクス（${scored.length}ノード・試験版）`;
+    title.textContent = `AI推測影響度×蓋然性マトリクス（${scored.length}ノード）`;
     containerEl.appendChild(title);
     const grid = document.createElement('div');
     grid.className = 'risk-matrix';
@@ -4147,7 +4147,7 @@ function setStraightenOn(on) {
 
     const title = document.createElement('div');
     title.className = 'edge-prob-title';
-    title.textContent = `因果エッジの蓋然性（${pairs.size}本・試験版・${scale === '10' ? '10段階' : '4段階'}）`;
+    title.textContent = `因果エッジの蓋然性（${pairs.size}本・${scale === '10' ? '10段階' : '4段階'}）`;
     containerEl.appendChild(title);
 
     const scaleRow = document.createElement('div');
