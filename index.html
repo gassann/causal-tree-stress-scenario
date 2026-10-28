@@ -2001,7 +2001,13 @@ function setStraightenOn(on) {
   }
   // PL合計（plSum）を業種ごとに合算する際の重み。デフォルトは全業種1（＝従来と同じ単純
   // 合計）。「ツリー構造を変えるタグ」と同じ扱いでスコア計算・シナリオ算出にも反映する。
-  const industryWeights = new Map(); // industry -> weight（未設定（デフォルト）は1として扱う）
+  const industryWeights = new Map([
+    ['化学', 15473],
+    ['海運業', 21878],
+    ['空運業', 11848],
+    ['輸送用機器', 75661],
+    ['陸運業', 8479],
+  ]); // industry -> weight（未設定の業種は1として扱う）
   function getIndustryWeight(industry) {
     const w = industryWeights.get(industry);
     return (w != null && isFinite(w)) ? w : 1;
