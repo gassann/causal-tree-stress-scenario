@@ -187,6 +187,17 @@
   }
   .chip.reset { border-style: dashed; }
   .chip.disabled { opacity: .4; cursor: not-allowed; }
+  /* 常に片方だけがactiveになる対のチップ（頂点のみ表示／すべて展開など）を、
+     1つの連結ピルにまとめて「対になっている」ことを見た目で示す。 */
+  .chip-segment-group {
+    display: inline-flex; border-radius: 999px; overflow: hidden;
+    border: 1px solid var(--line-strong);
+  }
+  .chip-segment-group .chip {
+    border: none; border-radius: 0;
+  }
+  .chip-segment-group .chip:not(:last-child) { border-right: 1px solid var(--line-strong); }
+  .chip-segment-group .chip.active:not(:last-child) { border-right-color: var(--accent); }
   .chip.disabled:hover { border-color: var(--line-strong); color: var(--ink-muted); }
   .tag-select {
     font-family: "Zen Kaku Gothic New", sans-serif;
@@ -775,7 +786,7 @@
   #plHeatmapSection .desc, #causeHeatmapSection .desc { max-width: none; }
   .tag-section-admin .tag-section-title .ribbon-toggle { margin-left: 8px; }
   .admin-tag-collapsed #adminTagBody { display: none; }
-  body:not(.admin-tags-open) .matrix-tab-chip { display: none !important; }
+  body:not(.matrix-tab-enabled) .matrix-tab-chip { display: none !important; }
   body:not(.admin-tags-open) .admin-gated-section { display: none !important; }
   .pl-heatmap-caption { font-size: 11.5px; color: var(--ink-muted); margin-bottom: 8px; }
   .pl-heatmap-wrap { overflow-x: auto; padding-bottom: 6px; }
@@ -2240,6 +2251,13 @@ function setStraightenOn(on) {
   visualStyleLabel.title = '見た目のみ。計算や他のタグに影響しません。';
   visualStyleRow.appendChild(visualStyleLabel);
 
+  // 「頂点のみ表示」と「すべて展開」は常に片方だけがactiveになる対のトグルなので、
+  // 1つの連結ピル（chip-segment-group）にまとめて、対になっていることが見た目で
+  // 分かるようにする。
+  const collapseExpandGroup = document.createElement('span');
+  collapseExpandGroup.className = 'chip-segment-group';
+  adminMiscRow.appendChild(collapseExpandGroup);
+
   const collapseAllChip = document.createElement('span');
   collapseAllChip.className = 'chip';
   collapseAllChip.textContent = '頂点のみ表示';
@@ -2256,7 +2274,7 @@ function setStraightenOn(on) {
     expandAllChip.classList.remove('active');
     applyVisibility();
   });
-  adminMiscRow.appendChild(collapseAllChip);
+  collapseExpandGroup.appendChild(collapseAllChip);
 
   const expandAllChip = document.createElement('span');
   expandAllChip.className = 'chip active';
@@ -2268,7 +2286,7 @@ function setStraightenOn(on) {
     collapseAllChip.classList.remove('active');
     applyVisibility();
   });
-  adminMiscRow.appendChild(expandAllChip);
+  collapseExpandGroup.appendChild(expandAllChip);
 
   const isolationChip = document.createElement('span');
   isolationChip.className = 'chip';
@@ -2958,6 +2976,21 @@ function setStraightenOn(on) {
     if (scenariosShown) applyScenarioDisplay();
   });
   adminMiscRow.appendChild(step2FilterChip);
+
+  // 「マトリクス」タブ（分離ビュー・連鎖カードで影響度×蓋然性をドラッグ&ドロップ編集
+  // する画面）の表示可否。管理者向けタグの開閉状態とは独立させ、このチップ自体で
+  // オン・オフする（デフォルトはオフ）。
+  const matrixTabChip = document.createElement('span');
+  matrixTabChip.className = 'chip';
+  matrixTabChip.textContent = 'マトリクス';
+  matrixTabChip.title = '分離ビュー・連鎖カードに「マトリクス」タブ（影響度×蓋然性の評価値をドラッグ&ドロップで編集する画面）を表示します。';
+  let matrixTabEnabled = false;
+  matrixTabChip.addEventListener('click', () => {
+    matrixTabEnabled = !matrixTabEnabled;
+    matrixTabChip.classList.toggle('active', matrixTabEnabled);
+    document.body.classList.toggle('matrix-tab-enabled', matrixTabEnabled);
+  });
+  adminMiscRow.appendChild(matrixTabChip);
 
   // ---- Step2ノードの紫表示の切り替え ----
   const step2ColorChip = document.createElement('span');
