@@ -950,14 +950,23 @@
 いずれも「操業レバレッジ（固定費・変動費率の構造）が一定」という仮定の下での売上換算値であり、実際の売上の増減とは符号・大きさが異なる場合がある（詳細は各エッジのツールチップの原文・計算式を参照）。</code>
       </div>
     </div>
-    <div class="formula-note">
-      <h3>「蓋然性(10段階)」の定義</h3>
+    <div class="formula-note" id="probScaleDefNote">
+      <h3>「蓋然性」の定義（現在選択中の段階のみ表示）</h3>
       <div class="formula-block">
-        <code>既存の蓋然性(1-4)はそのまま残し、より細かい粒度でエッジ単位の蓋然性を表すための10段階（10%刻み）の値をエッジに追加している。「PL合計×蓋然性（除外して再計算）」モードの「蓋然性の算出元」で「エッジの蓋然性」を選んでいるときに限り、「蓋然性の段階」で4段階／10段階を切り替えられる（10段階未設定のエッジは自動的に4段階の値にフォールバックする。ノード基準モードでは10段階の値を持たないため常に4段階が使われる）。
-「似た事象が過去どのくらいの間隔で起きているか」という再現頻度を基準に、以下のように10段階に割り当てている。</code>
+        <code>既存の蓋然性(1-4)はそのまま残し、より細かい粒度でエッジ単位の蓋然性を表すための10段階（10%刻み）の値をエッジに追加している。「PL合計×蓋然性（除外して再計算）」モードの「蓋然性の算出元」で「エッジの蓋然性」を選んでいるときに限り、「蓋然性の段階」で4段階／10段階を切り替えられる（10段階未設定のエッジは自動的に4段階の値にフォールバックする。ノード基準モードでは10段階の値を持たないため常に4段階が使われる）。</code>
       </div>
-      <div class="formula-block">
-        <code>10% 　前例が史上ほぼない、または極めて例外的な単発事象
+      <div class="formula-block" id="probScaleDef4">
+        <div class="formula-label">蓋然性(1-4)の定義</div>
+        <code>レベル1　発生する可能性は極めて低い。例外的な状況でのみ発生する　目安：10年超に1回程度
+レベル2　発生する可能性は低い。通常は発生しにくいが、一定の条件下では発生し得る　目安：5〜10年に1回程度
+レベル3　発生する可能性は中程度である。過去の発生事例・業務特性・外部環境等を踏まえると、無視できない程度に発生し得る
+レベル4　発生する可能性は高い。発生要因が既に存在し、または発生の兆候が認められる　目安：1年に1回以上</code>
+      </div>
+      <div class="formula-block" id="probScaleDef10">
+        <div class="formula-label">蓋然性(10段階)の定義</div>
+        <code>「似た事象が過去どのくらいの間隔で起きているか」という再現頻度を基準に、以下のように10段階に割り当てている。
+
+10% 　前例が史上ほぼない、または極めて例外的な単発事象
 20% 　数十年に1度あるかないか
 30% 　10〜数十年に1度程度
 40% 　5〜10年に1度程度
@@ -1994,9 +2003,19 @@ function setStraightenOn(on) {
     ['4', '4段階', '従来の蓋然性(1-4)を4→1.0/3→0.75/2→0.5/1→0.25の重みに変換して使います（デフォルト）。'],
     ['10', '10段階', 'エッジに試験的に付与した蓋然性(10段階・10%刻み)の値をそのまま重み（%÷100）として使います。10段階が未設定のエッジは自動的に4段階の値にフォールバックします。ノード基準モードでは10段階の値を持たないため選べません。'],
   ];
+  // 「蓋然性」の定義ブロック（formula-note）は選択中の段階（4段階／10段階）の
+  // 定義だけを表示し、もう片方は隠す。
+  function updateProbScaleDefDisplay() {
+    const def4 = document.getElementById('probScaleDef4');
+    const def10 = document.getElementById('probScaleDef10');
+    if (def4) def4.style.display = probabilityScale === '10' ? 'none' : '';
+    if (def10) def10.style.display = probabilityScale === '10' ? '' : 'none';
+  }
+  updateProbScaleDefDisplay();
   function setProbabilityScale(scale) {
     probabilityScale = scale;
     probabilityScaleSelects.forEach(sel => { sel.value = scale; sel.title = tagOptionTitle(PROBABILITY_SCALE_CHOICES, scale); });
+    updateProbScaleDefDisplay();
     invalidateExcludeScoreCache();
     if (scenariosShown) applyScenarioDisplay();
     if (scenarioFilterOn) { applyVisibility(); refreshIsolationIfOpen(); }
