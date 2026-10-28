@@ -5768,7 +5768,7 @@ function setStraightenOn(on) {
           editSup.textContent = '✎編集値';
           td.appendChild(editSup);
         }
-        if (s.estimatedCompanyCount > 0) {
+        if (activeTag === 'all' && s.estimatedCompanyCount > 0) {
           td.classList.add('has-estimated');
           const methods = s.estimateMethods || new Set();
           const markLabel = methods.has('実データ') ? '※実データ(DB)'
@@ -5867,9 +5867,9 @@ function setStraightenOn(on) {
     // 「実データ(DB)」（EDINET DBの実際の売上高から計算）と「逆算」（操業レバレッジを
     // 仮定した推計）のどちらで補うかの切替。ノードのスコア計算（computeExcludeBest）
     // にも同じ切替を反映させるため、キャッシュの無効化とノードスコア表示の再描画も行う。
-    // 「売上」タグは実データのみを対象とし逆算推計を使わないため、この切替自体が
-    // 意味を持たない。タグが「売上」の間はこの行を表示しない。
-    if (activeTag !== 'sales') {
+    // この切替は売上系のエッジにしか関係しないため、「全て」タグを見ている時だけ表示する
+    // （「売上」単体では実データのみに固定、「営業利益」「その他」には対象エッジが無い）。
+    if (activeTag === 'all') {
       const estLabelEl = document.createElement('span');
       estLabelEl.className = 'filter-label';
       estLabelEl.textContent = '推計方式';
