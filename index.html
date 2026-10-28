@@ -476,6 +476,36 @@
     display: flex; align-items: center; gap: 8px; padding: 12px 18px;
     border-top: 1px solid var(--line); background: var(--surface);
   }
+  /* ---- 使い方マニュアル モーダル（se-overlay/se-modal/se-modal-head/se-closeは共用） ---- */
+  .help-modal { width: min(880px, 100%); }
+  .help-modal-body {
+    padding: 4px 24px 22px; overflow: auto; flex: 1 1 auto;
+    font-size: 13px; line-height: 1.8; color: var(--ink);
+  }
+  .help-toc {
+    display: flex; flex-wrap: wrap; gap: 5px 14px; padding: 12px 14px; margin: 14px 0 6px;
+    background: var(--surface-alt); border: 1px solid var(--line); border-radius: 8px; font-size: 12px;
+  }
+  .help-toc a { color: var(--ink-muted); text-decoration: none; }
+  .help-toc a:hover { color: var(--accent-ink); text-decoration: underline; }
+  .help-modal-body h3 {
+    margin: 26px 0 8px; font-size: 14.5px; font-weight: 700; color: var(--ink);
+    border-bottom: 1px solid var(--line); padding-bottom: 5px; scroll-margin-top: 10px;
+  }
+  .help-modal-body h3:first-of-type { margin-top: 0; }
+  .help-modal-body h4 { margin: 14px 0 6px; font-size: 13px; font-weight: 700; color: var(--accent-ink); }
+  .help-modal-body p { margin: 0 0 9px; }
+  .help-modal-body ul { margin: 0 0 10px; padding-left: 20px; }
+  .help-modal-body li { margin-bottom: 5px; }
+  .help-modal-body code {
+    font-family: "JetBrains Mono", monospace; font-size: 12px; background: var(--surface-alt);
+    border-radius: 4px; padding: 1px 5px;
+  }
+  .help-note {
+    margin: 10px 0 14px; padding: 10px 14px; border: 1px solid var(--line-strong); border-radius: 8px;
+    background: var(--surface-alt); font-size: 12.5px; color: var(--ink-muted);
+  }
+  .help-note b { color: var(--ink); }
   .se-dots { display: flex; gap: 5px; margin-left: auto; flex-wrap: wrap; max-width: 260px; }
   .se-step-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--line-strong); flex: none; }
   .se-step-dot.on { background: var(--accent); }
@@ -836,6 +866,9 @@
       <button type="button" id="controlPanelToggle" class="ribbon-toggle" aria-expanded="true" aria-controls="controlPanel">
         <span class="ribbon-toggle-icon">▾</span><span class="ribbon-toggle-label">タグ一覧を折りたたむ</span>
       </button>
+      <button type="button" id="helpBtn" class="ribbon-toggle" style="margin-left:8px;">
+        <span class="ribbon-toggle-icon">？</span><span class="ribbon-toggle-label">使い方</span>
+      </button>
     </div>
     <div class="control-panel" id="controlPanel">
       <div class="stats" id="stats"></div>
@@ -1044,6 +1077,143 @@
       <div class="se-dots" id="seDots"></div>
       <button type="button" class="chip reset" id="seResetBtn">最初から</button>
       <button type="button" class="chip" id="seAutoBtn">自動再生</button>
+    </div>
+  </div>
+</div>
+
+<div id="helpOverlay" class="se-overlay" style="display:none;">
+  <div class="se-modal help-modal">
+    <div class="se-modal-head">
+      <div class="se-modal-title">因果ツリーの使い方</div>
+      <button type="button" id="helpCloseBtn" class="se-close" aria-label="閉じる">×</button>
+    </div>
+    <div class="help-modal-body">
+      <nav class="help-toc">
+        <a href="#help-intro">このツールについて</a>
+        <a href="#help-screen">画面の構成</a>
+        <a href="#help-legend">凡例の見方</a>
+        <a href="#help-tree">ツリーの操作</a>
+        <a href="#help-tags-display">タグ：表示・絞り込み</a>
+        <a href="#help-tags-structure">タグ：ツリー構造を変える</a>
+        <a href="#help-tags-score">タグ：スコア・シナリオ</a>
+        <a href="#help-tags-style">タグ：後処理・表示スタイル</a>
+        <a href="#help-isolation">ノード起点の絞り込み</a>
+        <a href="#help-scenario">シナリオ分析</a>
+        <a href="#help-heatmap">ヒートマップ</a>
+        <a href="#help-edit">評価値の編集とCSV書き出し</a>
+        <a href="#help-confusing">似た名前のボタンの違い</a>
+        <a href="#help-bottom">画面下部の一覧</a>
+      </nav>
+
+      <h3 id="help-intro">このツールについて</h3>
+      <p>決算短信・マクロ経済レポートから抽出した「原因→結果」の関係（因果関係）を矢印でつないだツリーです。ホルムズ海峡封鎖のような銀行のストレスシナリオが、どのような経路で企業業績（PL/BS）に波及するかを検討するために使います。</p>
+      <p>ノード（枠）が1つの事象、矢印（エッジ）が「原因→結果」の関係を表します。ノード・エッジにマウスを乗せると、その根拠となった会社名・決算短信の原文を見ることができます。</p>
+
+      <h3 id="help-screen">画面の構成</h3>
+      <ul>
+        <li><b>上部のタグ一覧</b> — 絞り込みや計算方法を切り替える操作パネル。「タグ一覧を折りたたむ」で隠せます。</li>
+        <li><b>凡例</b> — ノードの枠線の色・エッジの線の種類が何を表すかの説明。常に表示されています。</li>
+        <li><b>シナリオ情報</b> — 「シナリオ分析」をオンにしたときだけ表示される、上位シナリオの一覧。</li>
+        <li><b>ツリー本体</b> — 「主要な連鎖」（複数の因果がつながった図）と「個別の因果関係」（単独の原因→結果）。</li>
+        <li><b>業種×PL項目 / 業種×最終手前ノード ヒートマップ</b> — ツリーの下にある、業種別の影響度合いを一覧できる表。</li>
+      </ul>
+
+      <h3 id="help-legend">凡例の見方</h3>
+      <ul>
+        <li><b>実線のエッジ</b> — 決算短信・レポートに直接記載されている因果関係（抽出）。</li>
+        <li><b>点線のエッジ</b> — 資料に直接の記載はなく、AIが推測して繋いだ因果関係。ホバーすると推測理由が表示されます。</li>
+        <li><b>紫色の枠線</b> — 「Step2」で後から追加されたノード・因果関係（人がシナリオ・参照資料を選んで追加したもの）。</li>
+        <li><b>ノードの枠線の色</b> — 業種ごとに色分けされています（色と業種名の対応は凡例に表示）。</li>
+        <li><b>ノードの色の濃さ（マウスオーバー時）</b> — 影響度・蓋然性(1〜4)が付与済みのノードで、数字が大きいほど濃く表示されます。</li>
+      </ul>
+
+      <h3 id="help-tree">ツリーの操作</h3>
+      <ul>
+        <li><b>ノードをクリック</b> — 「ノード限定」がオンの間は、そのノードを起点に上流・下流だけへ絞り込みます（下記「ノード起点の絞り込み」参照）。</li>
+        <li><b>ノードを右クリック</b> — 「このノードを起点にしたツリーを表示」など、そのノードに関するメニューが開きます。</li>
+        <li><b>ノードをクリック（折りたたみ可）</b> — 子を持つノードは、クリックで下流の表示・非表示を切り替えられます（「主要な連鎖」の図）。</li>
+        <li><b>ノード・エッジにマウスを乗せる</b> — 根拠となった会社名・原文、増減率(%)、影響度・蓋然性の根拠などがツールチップで表示されます。</li>
+        <li><b>拡大・縮小・リセット（＋／－／リセット）</b> — 各図の右上にあるボタンでズーム操作ができます。</li>
+      </ul>
+
+      <h3 id="help-tags-display">タグ①：表示・絞り込み</h3>
+      <p class="help-note">この区分のタグは見た目の絞り込みだけで、<b>ツリー構造やスコアの計算結果は変わりません</b>。</p>
+      <ul>
+        <li><b>頂点のみ表示／すべて展開</b> — 頂点のみ表示にすると、各連鎖の起点（矢印が入ってこないノード）だけを残して下流を折りたたみます。すべて展開で元に戻します。</li>
+        <li><b>ノード限定</b> — オンにしてノードをクリックすると、そのノードと因果でつながる上流・下流だけに絞り込みます。もう一度同じノードをクリックすると解除されます。</li>
+        <li><b>全て表示</b> — 「ノード限定」による絞り込み表示を解除し、すべての因果連鎖を元の表示に戻します。</li>
+        <li><b>ポジティブなPLノードを表示</b> — オフの間は、増収・増益・コスト減など企業にとって好ましい方向のPL/BSノードを非表示にします（ストレスシナリオではネガティブな影響を見るのが基本のため）。</li>
+        <li><b>シナリオに関連するノードのみを表示</b> — オンにすると、現在の設定で表示される上位シナリオの経路上のノードだけに絞り込みます。</li>
+        <li><b>PLノードを非表示</b> — PL/BS勘定科目そのものを指すノード（業種別に色分けされた枠のノード）を取り除いた状態でツリーを組み立て直します。</li>
+      </ul>
+
+      <h3 id="help-tags-structure">タグ②：ツリー構造を変えるタグ</h3>
+      <p class="help-note">この区分のタグは<b>ツリーの形そのものやスコア・シナリオの計算結果にも反映されます</b>。</p>
+      <ul>
+        <li><b>業種で絞り込み</b> — 選んだ業種の有報から抽出した因果関係（エッジ）のみに絞り込みます。そのエッジが無くなったノードも非表示になります。「すべて表示」で解除できます。</li>
+        <li><b>業種を除外</b> — 選んだ業種の有報から抽出した因果関係（エッジ）をツリーから取り除きます。「除外なし」で解除できます（デフォルトで不動産業が除外されています）。</li>
+        <li><b>業種ごとの重み</b> — PL合計を業種間で合算する際に、各業種の寄与に掛ける係数です（デフォルト1＝単純合計）。</li>
+        <li><b>企業へのネガティブ影響なしノード非表示</b> — 下流を辿っても実在企業のPLにネガティブな影響が及ばないノードを非表示にします。</li>
+        <li><b>Step2ノードを非表示</b> — Step2で新規に追加されたノード（枠線が紫）を非表示にします。</li>
+        <li><b>ノード非表示（クリックで除外）</b> — オンの間にノードをクリックすると、そのノードを表示から除外します。「非表示ノードを戻す」で復元できます。</li>
+        <li><b>迂回路がある直接エッジを非表示</b> — A→Cの直接エッジがある場合、A→B→Cのような迂回路が図の中に別にあるなら、直接エッジの方を非表示にします。</li>
+      </ul>
+
+      <h3 id="help-tags-score">タグ③：スコア・シナリオ計算</h3>
+      <ul>
+        <li><b>ノードのスコア計算方法</b> — 「AI推測影響度×蓋然性（最大16点）」「AI推測影響度×蓋然性（マトリクス色ゾーン）」「有報からの影響度×蓋然性」「累積蓋然性のみ」の4種類から選べます。前の2つはAIが評価した1〜4の値、「有報からの影響度×蓋然性」は有報の実際の増減率(%)を使う方式です。</li>
+        <li><b>蓋然性の算出元</b> — 「有報からの影響度×蓋然性」モードの時だけ表示され、結果ノード自身の蓋然性を使うか、原因→結果のエッジごとの蓋然性を使うかを切り替えます。</li>
+        <li><b>蓋然性の段階</b> — 蓋然性を4段階(1-4)で使うか、より細かい10段階(10%刻み)で使うかを切り替えます。</li>
+        <li><b>シナリオ分析（表示）</b> — オンにすると、スコア上位のシナリオ（経路）を複数ハイライトし、画面上部にシナリオ一覧が表示されます。シナリオ数・重複許容率も調整できます。</li>
+      </ul>
+
+      <h3 id="help-tags-style">タグ④：後処理・表示スタイル</h3>
+      <p class="help-note">この区分は<b>見た目だけ</b>で、計算や他のタグには影響しません。</p>
+      <ul>
+        <li><b>ノードをまとめて表示</b> — 枝分かれの無い一本道（兄弟ノードが無い連鎖）を、見た目上だけ1つのノードにまとめて表示します。因果データベース自体は変更されません。</li>
+        <li><b>Step2ノードを紫で表示</b> — Step2で追加されたノードの枠線を常に紫色で表示します。</li>
+        <li><b>出現頻度で線を太くする</b> — 同じ原因→結果の組み合わせが何件分まとまっているかに応じて、エッジの線を太くします。</li>
+        <li><b>エッジをまっすぐに近づける</b> — ノードの並び順は変えずに、エッジができるだけ直線に近くなるよう調整します。</li>
+      </ul>
+
+      <h3 id="help-isolation">ノードを起点に絞り込む（分離ビュー）</h3>
+      <p>「ノード限定」をオンにしてノードをクリックすると、そのノードを中心にした上流・下流だけの図がパネルで開きます。パネル上部のタブで、以下の4つの見方を切り替えられます（データがある場合のみタブが表示されます）。</p>
+      <ul>
+        <li><b>ツリー</b> — 絞り込んだノードだけの因果図。</li>
+        <li><b>マトリクス</b> — 影響度×蓋然性が付与されたノードを、影響度・蓋然性の2軸に並べた表（ドラッグでセル間を移動＝評価値の編集も可能）。</li>
+        <li><b>エッジ蓋然性</b> — エッジごとの蓋然性(1-4、または10段階)を列ごとに並べた表（ドラッグで編集可能）。</li>
+        <li><b>累積蓋然性</b> — 各ノードの累積蓋然性（ホルムズ海峡封鎖を起点として、親→子のエッジの蓋然性を掛け合わせた値）を大きい順に一覧表示します。</li>
+      </ul>
+      <p>パネルを閉じるには「✕ 全体表示に戻る」をクリックします。</p>
+
+      <h3 id="help-scenario">シナリオ分析</h3>
+      <p>「シナリオ分析」の「表示」をオンにすると、スコア計算方法に応じた上位シナリオ（根から主要なPL項目までの経路）が複数ハイライトされ、画面上部にシナリオ1・2・3…として一覧表示されます。</p>
+      <p>「有報からの影響度×蓋然性」モードでは、1位のシナリオで使われた終着点（PLノードの一歩手前の原因ノード）を除外して全体を再計算することで次点のシナリオを求めます。モードによって順位の決め方が異なるので、「シナリオの求め方を見る」ボタン（「有報からの影響度×蓋然性」モード時のみ表示）から実データでのステップ解説を見ることができます。</p>
+
+      <h3 id="help-heatmap">ヒートマップ</h3>
+      <ul>
+        <li><b>業種×PL項目 影響ヒートマップ</b> — 業種・PL項目ごとの「ネガティブな」変動率(%)の平均を色の濃さで表示します。ツリーのノードをクリックすると、そのノードから辿れるPL項目だけに絞り込まれます。</li>
+        <li><b>業種×最終手前ノード 影響ヒートマップ</b> — 「売上」「営業利益」「その他」タグでPL項目を切り替え、そのPL項目に直接つながるエッジの原因ノード（最終手前ノード）を列、業種を行として変動率(%)を表示します。</li>
+      </ul>
+      <p>どちらも各セルをクリックすると編集（what-if用の上書き）ができ、「編集をリセット」で元に戻せます。</p>
+
+      <h3 id="help-edit">評価値の編集とCSV書き出し</h3>
+      <p>影響度・蓋然性（マトリクス）やエッジ蓋然性（エッジ蓋然性タブ）は、チップをドラッグして別のセル・列へ移動させることで、このセッション中だけ値を編集できます（ページを再読み込みすると元に戻ります）。</p>
+      <p>編集した内容を残したい場合は、各編集画面の「変更をCSVとしてダウンロード」からCSVを書き出し、プロジェクト内の元ファイル（<code>ホルムズ海峡封鎖_ノード影響度蓋然性.csv</code> / <code>ホルムズ海峡封鎖_エッジ蓋然性.csv</code>）に手動で置き換えてください。</p>
+
+      <h3 id="help-confusing">似た名前のボタンの違い</h3>
+      <p>「表示」「全部」という似た言葉を含むボタンが3つありますが、それぞれ対象が異なります。</p>
+      <ul>
+        <li><b>すべて表示</b>（「業種で絞り込み」の列にあるボタン）— 業種の絞り込み選択を解除し、全業種を対象に戻します。</li>
+        <li><b>すべて展開</b> — 「頂点のみ表示」で折りたたんだ下流のノードを、すべて展開して見せます。</li>
+        <li><b>全て表示</b> — 「ノード限定」による絞り込み表示を解除し、すべての因果連鎖を表示します。</li>
+      </ul>
+
+      <h3 id="help-bottom">画面下部の一覧</h3>
+      <ul>
+        <li><b>主要な連鎖</b> — 複数の因果関係がつながった連鎖の図。矢印をたどると波及経路を追えます。</li>
+        <li><b>個別の因果関係</b> — 他の因果と連鎖しなかった単独の原因→結果の記述です。</li>
+      </ul>
     </div>
   </div>
 </div>
@@ -1390,6 +1560,20 @@ function setStraightenOn(on) {
     try { localStorage.setItem(COLLAPSE_KEY, collapsed ? '1' : '0'); } catch (e) { /* ignore */ }
     apply(collapsed);
   });
+})();
+
+// ---- 使い方マニュアル モーダル ----
+(function () {
+  const btn = document.getElementById('helpBtn');
+  const overlay = document.getElementById('helpOverlay');
+  const closeBtn = document.getElementById('helpCloseBtn');
+  if (!btn || !overlay || !closeBtn) return;
+  function open() { overlay.style.display = 'flex'; }
+  function close() { overlay.style.display = 'none'; }
+  btn.addEventListener('click', open);
+  closeBtn.addEventListener('click', close);
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && overlay.style.display !== 'none') close(); });
 })();
 
 (function () {
