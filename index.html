@@ -4157,7 +4157,7 @@ function setStraightenOn(on) {
     scale4Chip.textContent = '4段階';
     const scale10Chip = document.createElement('span');
     scale10Chip.className = 'chip' + (scale === '10' ? ' active' : '');
-    scale10Chip.textContent = '10段階（試験）';
+    scale10Chip.textContent = '10段階';
     scale10Chip.title = '10段階が未設定のエッジは「未設定」列に表示されます（4段階へのフォールバックはこの編集ビューでは行いません）。';
     scale4Chip.addEventListener('click', () => setProbabilityScale('4'));
     scale10Chip.addEventListener('click', () => setProbabilityScale('10'));
@@ -4287,7 +4287,7 @@ function setStraightenOn(on) {
     scale4Chip.textContent = '4段階';
     const scale10Chip = document.createElement('span');
     scale10Chip.className = 'chip' + (scale === '10' ? ' active' : '');
-    scale10Chip.textContent = '10段階（試験）';
+    scale10Chip.textContent = '10段階';
     scale4Chip.addEventListener('click', () => setProbabilityScale('4'));
     scale10Chip.addEventListener('click', () => setProbabilityScale('10'));
     scaleRow.appendChild(scale4Chip);
