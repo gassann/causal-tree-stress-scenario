@@ -4260,12 +4260,13 @@ function setStraightenOn(on) {
   }
 
   // ---- cumulative probability list (同じ表示範囲のノードを累積蓋然性の降順で一覧表示) ----
-  // 「ホルムズ海峡封鎖」と繋がっていないノード（累積蓋然性が常に0）は対象外。
+  // 「ホルムズ海峡封鎖」と繋がっていないノード（累積蓋然性が常に0）と、PL/BS勘定科目
+  // そのものを指すノード（node.industryがある、エッジ蓋然性の対象外と同じ考え方）は対象外。
   const cumulativeProbRegistry = new Map(); // containerEl -> nodeIds, for in-place refresh after a scale/edge change
   function renderCumulativeProbInto(containerEl, nodeIds) {
     containerEl.innerHTML = '';
     const rows = nodeIds
-      .filter(id => isHormuzReachable(id))
+      .filter(id => isHormuzReachable(id) && !nodesById.get(id).industry)
       .map(id => ({ id, cum: cumulativeProbability(id, new Set()) }))
       .filter(r => r.cum > 0)
       .sort((a, b) => b.cum - a.cum);
