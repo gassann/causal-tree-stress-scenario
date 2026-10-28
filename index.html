@@ -1168,11 +1168,8 @@
       <h3 id="help-tags-display">タグ①：表示・絞り込み</h3>
       <p class="help-note">この区分のタグは見た目の絞り込みだけで、<b>ツリー構造やスコアの計算結果は変わりません</b>。</p>
       <ul>
-        <li><b>頂点のみ表示／すべて展開</b> — 頂点のみ表示にすると、各連鎖の起点（矢印が入ってこないノード）だけを残して下流を折りたたみます。すべて展開で元に戻します。</li>
+        <li><b>すべて展開</b> — 「頂点のみ表示」（管理者向け）で折りたたんだ下流のノードを、すべて展開して見せます。</li>
         <li><b>ノード限定</b> — オンにしてノードをクリックすると、そのノードと因果でつながる上流・下流だけに絞り込みます。もう一度同じノードをクリックするか、分離ビューの「✕ 全体表示に戻る」を押すと解除されます。</li>
-        <li><b>ポジティブなPLノードを表示</b> — オフの間は、増収・増益・コスト減など企業にとって好ましい方向のPL/BSノードを非表示にします（ストレスシナリオではネガティブな影響を見るのが基本のため）。</li>
-        <li><b>シナリオに関連するノードのみを表示</b> — オンにすると、現在の設定で表示される上位シナリオの経路上のノードだけに絞り込みます。</li>
-        <li><b>PLノードを非表示</b> — PL/BS勘定科目そのものを指すノード（業種別に色分けされた枠のノード）を取り除いた状態でツリーを組み立て直します。</li>
       </ul>
 
       <h3 id="help-tags-structure">タグ②：ツリー構造を変えるタグ</h3>
@@ -1195,6 +1192,8 @@
       <p class="help-note">この区分は<b>見た目だけ</b>で、計算や他のタグには影響しません。</p>
       <ul>
         <li><b>ノードをまとめて表示</b> — 枝分かれの無い一本道（兄弟ノードが無い連鎖）を、見た目上だけ1つのノードにまとめて表示します。因果データベース自体は変更されません。</li>
+        <li><b>シナリオに関連するノードのみを表示</b> — オンにすると、現在の設定で表示される上位シナリオの経路上のノードだけに絞り込みます。</li>
+        <li><b>PLノードを非表示</b> — PL/BS勘定科目そのものを指すノード（業種別に色分けされた枠のノード）を取り除いた状態でツリーを組み立て直します。</li>
         <li><b>Step2ノードを紫で表示</b> — Step2で追加されたノードの枠線を常に紫色で表示します。</li>
         <li><b>出現頻度で線を太くする</b> — 同じ原因→結果の組み合わせが何件分まとまっているかに応じて、エッジの線を太くします。</li>
         <li><b>エッジをまっすぐに近づける</b> — ノードの並び順は変えずに、エッジができるだけ直線に近くなるよう調整します。</li>
@@ -1205,7 +1204,9 @@
       <ul>
         <li><b>業種で絞り込み</b> — 選んだ業種の有報から抽出した因果関係（エッジ）のみに絞り込みます。そのエッジが無くなったノードも非表示になります。「すべて表示」で解除できます。</li>
         <li><b>業種を除外</b> — 選んだ業種の有報から抽出した因果関係（エッジ）をツリーから取り除きます。「除外なし」で解除できます（デフォルトで不動産業が除外されています）。</li>
+        <li><b>頂点のみ表示</b> — 各連鎖の起点（他から矢印が入ってこないノード）だけを残し、それ以外を折りたたみます。</li>
         <li><b>企業へのネガティブ影響なしノード非表示</b> — 下流を辿っても実在企業のPLにネガティブな影響が及ばないノードを非表示にします。</li>
+        <li><b>ポジティブなPLノードを表示</b> — オフの間は、増収・増益・コスト減など企業にとって好ましい方向のPL/BSノードを非表示にします（ストレスシナリオではネガティブな影響を見るのが基本のため）。</li>
         <li><b>Step2ノードを非表示</b> — Step2で新規に追加されたノード（枠線が紫）を非表示にします。</li>
         <li><b>マトリクス（分離ビューのタブ）</b> — 影響度・蓋然性の評価値をドラッグ&ドロップで編集するための画面です。評価データのメンテナンス用で、通常の閲覧では使いません。</li>
       </ul>
@@ -2235,6 +2236,10 @@ function setStraightenOn(on) {
   const industryWeightRow = document.getElementById('industryWeightRow');
   const structureMiscRow = document.getElementById('structureMiscRow');
   const adminMiscRow = document.getElementById('adminMiscRow');
+  const adminMiscLabel = document.createElement('span');
+  adminMiscLabel.className = 'filter-label';
+  adminMiscLabel.textContent = '表示の絞り込み・非表示';
+  adminMiscRow.appendChild(adminMiscLabel);
 
   // ---- 業種を除外 ----
   // 選択した業種（エッジのe.industry＝原因・結果を報告した会社の業種）を、表示だけで
@@ -2360,7 +2365,7 @@ function setStraightenOn(on) {
     expandAllChip.classList.remove('active');
     applyVisibility();
   });
-  displayRow.appendChild(collapseAllChip);
+  adminMiscRow.appendChild(collapseAllChip);
 
   const expandAllChip = document.createElement('span');
   expandAllChip.className = 'chip active';
@@ -3005,11 +3010,6 @@ function setStraightenOn(on) {
   structureMiscLabel.textContent = 'ノード・エッジの非表示';
   structureMiscRow.appendChild(structureMiscLabel);
 
-  const adminMiscLabel = document.createElement('span');
-  adminMiscLabel.className = 'filter-label';
-  adminMiscLabel.textContent = 'ノードの非表示';
-  adminMiscRow.appendChild(adminMiscLabel);
-
   let hideNoImpactNodes = true;
   const impactFilterChip = document.createElement('span');
   impactFilterChip.className = 'chip' + (hideNoImpactNodes ? ' active' : '');
@@ -3039,7 +3039,7 @@ function setStraightenOn(on) {
     applyVisibility();
     refreshIsolationIfOpen();
   });
-  displayRow.appendChild(positivePlChip);
+  adminMiscRow.appendChild(positivePlChip);
 
   // ---- Step2で追加されたノードの表示/非表示 ----
   // Step2新規ノード（node.isNew）だけを対象に非表示にする。Step2由来のエッジのうち
@@ -3150,7 +3150,7 @@ function setStraightenOn(on) {
       applyVisibility();
       refreshIsolationIfOpen();
     });
-    displayRow.appendChild(scenarioFilterChip);
+    visualStyleRow.appendChild(scenarioFilterChip);
   }
 
   // ---- edge thickness by occurrence frequency ----
@@ -3210,7 +3210,7 @@ function setStraightenOn(on) {
   hidePlChip.textContent = 'PLノードを非表示';
   hidePlChip.title = 'PL/BSの勘定科目そのものを指すノード（業種別に色分けされた枠のノード）を取り除いた状態でツリー全体を組み立て直します。PLノードだけに繋がっていたノードは末端として表示されます。切り替えるとページを再読み込みします。';
   hidePlChip.addEventListener('click', () => setHidePlOn(!isHidePlOn()));
-  displayRow.appendChild(hidePlChip);
+  visualStyleRow.appendChild(hidePlChip);
 
   // ---- 自明な連鎖をまとめて表示 ----
   {
