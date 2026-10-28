@@ -225,6 +225,12 @@
   .tag-section-note {
     font-size: 11px; font-weight: 400; color: var(--ink-muted);
   }
+  .admin-badge {
+    display: inline-block; font-size: 9.5px; font-weight: 700; letter-spacing: .02em;
+    color: var(--ink-faint); background: var(--surface-alt); border: 1px solid var(--line);
+    border-radius: 999px; padding: 1px 7px; margin-left: 5px; vertical-align: middle;
+    white-space: nowrap; cursor: default;
+  }
   .tag-section .filter-row:empty { display: none; }
   .industry-weight-label {
     display: inline-flex; align-items: center; gap: 6px;
@@ -934,7 +940,7 @@
     </div>
     <div class="view-tabs" id="isolationViewTabs" style="display:none;">
       <span class="chip active" data-view="tree">ツリー</span>
-      <span class="chip" data-view="matrix">マトリクス</span>
+      <span class="chip" data-view="matrix">マトリクス<span class="admin-badge" title="通常のユーザーは操作する必要はありません。">管理者向け</span></span>
       <span class="chip" data-view="edgeprob">エッジ蓋然性</span>
       <span class="chip" data-view="cumprob">累積蓋然性</span>
     </div>
@@ -1161,7 +1167,7 @@
       </ul>
 
       <h3 id="help-tags-structure">タグ②：ツリー構造を変えるタグ</h3>
-      <p class="help-note">この区分のタグは<b>ツリーの形そのものやスコア・シナリオの計算結果にも反映されます</b>。</p>
+      <p class="help-note">この区分のタグは<b>ツリーの形そのものやスコア・シナリオの計算結果にも反映されます</b>。「管理者向け」バッジが付いたタグ（業種で絞り込み／業種を除外／企業へのネガティブ影響なしノード非表示／Step2ノードを非表示）と、分離ビューの「マトリクス」タブは、通常のユーザーは基本的に操作する必要はありません。</p>
       <ul>
         <li><b>業種で絞り込み</b> — 選んだ業種の有報から抽出した因果関係（エッジ）のみに絞り込みます。そのエッジが無くなったノードも非表示になります。「すべて表示」で解除できます。</li>
         <li><b>業種を除外</b> — 選んだ業種の有報から抽出した因果関係（エッジ）をツリーから取り除きます。「除外なし」で解除できます（デフォルトで不動産業が除外されています）。</li>
@@ -2063,6 +2069,14 @@ function setStraightenOn(on) {
     const chosen = choices.find(([v]) => v === value);
     return (chosen && chosen[2]) || '';
   }
+  // 管理者向け（通常のユーザーは操作不要）のタグ・タブに付ける目印バッジ。
+  function addAdminBadge(el) {
+    const badge = document.createElement('span');
+    badge.className = 'admin-badge';
+    badge.textContent = '管理者向け';
+    badge.title = '通常のユーザーは操作する必要はありません。';
+    el.appendChild(badge);
+  }
 
   // ---- impact / probability level badges (currently populated for a subset of nodes only) ----
   const LEVEL_COLORS = { 1: '#6B9E6E', 2: '#C9A227', 3: '#D2691E', 4: '#B23A3A' };
@@ -2138,6 +2152,7 @@ function setStraightenOn(on) {
   const label = document.createElement('span');
   label.className = 'filter-label';
   label.textContent = '業種で絞り込み';
+  addAdminBadge(label);
   filterRow.appendChild(label);
 
   const resetChip = document.createElement('span');
@@ -2204,6 +2219,7 @@ function setStraightenOn(on) {
   const industryExcludeLabel = document.createElement('span');
   industryExcludeLabel.className = 'filter-label';
   industryExcludeLabel.textContent = '業種を除外';
+  addAdminBadge(industryExcludeLabel);
   industryExcludeRow.appendChild(industryExcludeLabel);
 
   function refreshAfterStructureChange() {
@@ -2981,6 +2997,7 @@ function setStraightenOn(on) {
   const impactFilterChip = document.createElement('span');
   impactFilterChip.className = 'chip' + (hideNoImpactNodes ? ' active' : '');
   impactFilterChip.textContent = '企業へのネガティブ影響なしノード非表示';
+  addAdminBadge(impactFilterChip);
   impactFilterChip.title = 'オンにすると、下流を辿っても実在企業のPL（勘定科目）にネガティブな影響が及ばないノードを非表示にします。影響が全く無いノードだけでなく、増収・増益などポジティブな影響しか無いノードも「ネガティブ影響なし」として隠します。「PLノードを非表示」と併用した場合も、PLノードを含む元のデータで判定した影響の有無で絞り込みます。';
   impactFilterChip.addEventListener('click', () => {
     hideNoImpactNodes = !hideNoImpactNodes;
@@ -3020,6 +3037,7 @@ function setStraightenOn(on) {
   const step2FilterChip = document.createElement('span');
   step2FilterChip.className = 'chip';
   step2FilterChip.textContent = 'Step2ノードを非表示';
+  addAdminBadge(step2FilterChip);
   step2FilterChip.title = 'オンにすると、Step2（人がシナリオと参照資料を選んで追加）で新規に追加されたノードを非表示にします（枠線が紫のノード）。Step2由来でも元々存在したノード同士を繋ぐエッジは表示されたままです。ツリー構造を変えるタグなので、シナリオ計算（有報からの影響度×蓋然性）にも反映されます。';
   step2FilterChip.addEventListener('click', () => {
     hideStep2Nodes = !hideStep2Nodes;
@@ -4863,6 +4881,7 @@ function setStraightenOn(on) {
         const matrixTab = document.createElement('span');
         matrixTab.className = 'chip';
         matrixTab.textContent = 'マトリクス';
+        addAdminBadge(matrixTab);
         matrixTab.addEventListener('click', () => {
           tabs.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
           matrixTab.classList.add('active');
