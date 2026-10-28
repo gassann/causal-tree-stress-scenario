@@ -980,11 +980,11 @@
 
   <section id="causeHeatmapSection">
     <h2>減収率を編集</h2>
-    <p class="desc">「売上」「営業利益」「その他」「全て」タグで対象のPL項目（売上高増加/減少・部門売上増加/減少、営業利益増加/減少・部門営業利益増加/減少、または売上原価・売上総利益・経常利益・当期純利益・部門／地域利益など売上・営業利益以外の一般的なPL項目、あるいはその全部）を切り替え、そのPL項目に直接つながるエッジの「原因ノード（PL項目の手前のノード）」を列、業種を行として、変動率(%)のトリム平均を表示します。ノードの影響度・スコア（有報からの影響度×蓋然性）と揃えるため、増収・増益等のプラス方向（増加系ラベル）は対象外とし、マイナス方向（減少系ラベル）のみを対象にトリム平均を取ります。色は単色の濃淡のみで、変動率の大きさではなく該当する会社数（裏付けの厚さ）を表します。業種の行見出しには「このヒートマップに実際に出てくる会社数／有報からその業種として抽出された全会社数」を表示します。対象は「ホルムズ海峡封鎖」から辿れる原因ノードのみ。マイナス方向のエッジが一つも無い原因ノード（例:「賃料水準の上昇」が不動産業の増益にしか繋がらない場合）は列から除外します。行・列は選択中のタグに実際に出てくる組み合わせだけに絞られます（タグを切り替えると列も変わります）。「売上」タグは実データのみを対象とし、営業利益等からの逆算推計は含めません。「業種×PL項目」ヒートマップと同じく、迂回路がある直接エッジ・手動非表示ノード・Step2ノード非表示の設定を反映します。</p>
+    <p class="desc">PL項目は「全て」固定（売上高増加/減少・部門売上増加/減少、営業利益増加/減少・部門営業利益増加/減少、売上原価・売上総利益・経常利益・当期純利益・部門／地域利益など、対象になり得るPL項目すべてをまとめて対象にします）。対象PL項目に直接つながるエッジの「原因ノード（PL項目の手前のノード）」を列、業種を行として、変動率(%)のトリム平均を表示します。ノードの影響度・スコア（有報からの影響度×蓋然性）と揃えるため、増収・増益等のプラス方向（増加系ラベル）は対象外とし、マイナス方向（減少系ラベル）のみを対象にトリム平均を取ります。色は単色の濃淡のみで、変動率の大きさではなく該当する会社数（裏付けの厚さ）を表します。業種の行見出しには「このヒートマップに実際に出てくる会社数／有報からその業種として抽出された全会社数」を表示します。対象は「ホルムズ海峡封鎖」から辿れる原因ノードのみ。マイナス方向のエッジが一つも無い原因ノード（例:「賃料水準の上昇」が不動産業の増益にしか繋がらない場合）は列から除外します。「業種×PL項目」ヒートマップと同じく、迂回路がある直接エッジ・手動非表示ノード・Step2ノード非表示の設定を反映します。</p>
     <div class="filter-row" id="causeHeatmapTagRow"></div>
     <div class="pl-heatmap-wrap" id="causeHeatmapWrap"></div>
     <div class="formula-note">
-      <h3>「逆算(推計)」の計算式</h3>
+      <h3>「逆算」の計算式</h3>
       <div class="formula-block">
         <div class="formula-label">① 会社レベル（営業利益・経常利益ベース、41件）</div>
         <code>変動費率 ＝ 前年度の売上原価 ÷ 前年度の売上高
@@ -5344,8 +5344,9 @@ function setStraightenOn(on) {
     // （どのノード・業種が「辿れる」か）を変えてしまうため、セルの塗り替えだけでは
     // 足りず表全体を作り直す必要がある。そのためbuild()にまとめ、各トグルの
     // クリックハンドラから呼ばれるrefreshCauseHeatmapとして公開する。選択中のタグ
-    // （売上／営業利益／その他）はbuild()の外で保持し、作り直しても引き継ぐ。
-    let activeTag = 'sales';
+    // はbuild()の外で保持し、作り直しても引き継ぐ。PL項目は常に「全て」固定
+    // （ユーザーが売上／営業利益／その他へ切り替えることはできない）。
+    let activeTag = 'all';
     // 今回有報を取得した業種一覧（モジュール先頭で定義した「業種で絞り込み」「業種を除外」
     // タグと同じ6業種）。build()内では同名のローカル変数industriesを別途定義するため、
     // build()の外でこの名前に退避しておく。
@@ -5852,16 +5853,15 @@ function setStraightenOn(on) {
     tagLabelEl.textContent = 'PL項目';
     tagRow.appendChild(tagLabelEl);
 
-    const TAG_CHOICES = Object.keys(TAG_DEFS).map(key => [key, TAG_DEFS[key].chipLabel, TAG_DEFS[key].title]);
-    const tagSelect = document.createElement('select');
-    tagSelect.className = 'tag-select';
-    buildTagOptions(tagSelect, TAG_CHOICES, activeTag);
-    tagSelect.addEventListener('change', () => {
-      activeTag = tagSelect.value;
-      tagSelect.title = tagOptionTitle(TAG_CHOICES, activeTag);
-      build();
-    });
-    tagRow.appendChild(tagSelect);
+    // PL項目は常に「全て」固定。以前は売上／営業利益／その他へ切り替えられる
+    // セレクトだったが、ユーザーが変更できないよう固定表示に変更した。
+    const tagFixedEl = document.createElement('span');
+    tagFixedEl.className = 'tag-select';
+    tagFixedEl.style.cursor = 'default';
+    tagFixedEl.style.opacity = '.85';
+    tagFixedEl.textContent = TAG_DEFS.all.chipLabel;
+    tagFixedEl.title = TAG_DEFS.all.title + '（固定・変更できません）';
+    tagRow.appendChild(tagFixedEl);
 
     // 売上高%が有報に記載されていないエッジ（営業利益等の増減率%しか無いケース）を、
     // 「実データ(DB)」（EDINET DBの実際の売上高から計算）と「逆算」（操業レバレッジを
