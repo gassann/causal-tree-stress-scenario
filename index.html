@@ -565,6 +565,26 @@
   .edge-prob-chip:hover { border-color: var(--accent); color: var(--accent-ink); }
   .edge-prob-actions { margin-top: 10px; }
 
+  .cumulative-prob-wrap { margin-top: 4px; }
+  .cumulative-prob-title { font-size: 12px; font-weight: 700; color: var(--ink-muted); margin-bottom: 8px; }
+  .cumulative-prob-scale-row { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+  .cumulative-prob-list { display: flex; flex-direction: column; gap: 5px; }
+  .cumulative-prob-row { display: grid; grid-template-columns: minmax(140px, 1fr) 2fr 48px; align-items: center; gap: 8px; }
+  .cumulative-prob-label {
+    font-size: 11.5px; color: var(--ink); cursor: pointer; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  .cumulative-prob-label:hover { color: var(--accent-ink); text-decoration: underline; }
+  .cumulative-prob-bar-wrap {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 4px;
+    height: 10px; overflow: hidden;
+  }
+  .cumulative-prob-bar { display: block; height: 100%; background: var(--accent); border-radius: 4px 0 0 4px; }
+  .cumulative-prob-pct {
+    font-family: "JetBrains Mono", monospace; font-size: 11px; color: var(--ink-muted);
+    text-align: right; font-variant-numeric: tabular-nums;
+  }
+
   .edge-hit { fill: none; stroke: transparent; stroke-width: 14; cursor: pointer; }
   .edge-line { fill: none; stroke: var(--line-strong); stroke-width: 1.6; marker-end: url(#arrow); transition: opacity .15s ease, stroke .12s ease, stroke-width .12s ease; }
   .edge-group:hover .edge-line { stroke: var(--warn); }
@@ -876,11 +896,13 @@
       <span class="chip active" data-view="tree">ツリー</span>
       <span class="chip" data-view="matrix">マトリクス</span>
       <span class="chip" data-view="edgeprob">エッジ蓋然性</span>
+      <span class="chip" data-view="cumprob">累積蓋然性</span>
     </div>
     <div class="zoom-controls" id="isolationZoomBar"></div>
     <div class="isolation-svg-wrap" id="isolationSvgWrap"></div>
     <div class="risk-matrix-wrap" id="isolationMatrixWrap" style="display:none;"></div>
     <div class="edge-prob-wrap" id="isolationEdgeProbWrap" style="display:none;"></div>
+    <div class="cumulative-prob-wrap" id="isolationCumulativeProbWrap" style="display:none;"></div>
   </section>
 
   <main>
@@ -1960,6 +1982,7 @@ function setStraightenOn(on) {
       document.getElementById('isolationZoomBar').style.display = view === 'tree' ? '' : 'none';
       document.getElementById('isolationMatrixWrap').style.display = view === 'matrix' ? '' : 'none';
       document.getElementById('isolationEdgeProbWrap').style.display = view === 'edgeprob' ? '' : 'none';
+      document.getElementById('isolationCumulativeProbWrap').style.display = view === 'cumprob' ? '' : 'none';
     });
   });
 
@@ -2017,6 +2040,7 @@ function setStraightenOn(on) {
     if (scenarioFilterOn) { applyVisibility(); refreshIsolationIfOpen(); }
     refreshNodeScoreLabels();
     refreshAllEdgeProbViews();
+    refreshAllCumulativeProbViews();
   }
   // A→Cの直接エッジに対して、この図の中にA→B→Cのような2ホップ以上の迂回路が
   // 別に存在するなら、その直接エッジを非表示にするかどうか。デフォルトはオン。
@@ -4190,6 +4214,7 @@ function setStraightenOn(on) {
         draggedEdgePairKey = null;
         invalidateExcludeScoreCache();
         refreshAllEdgeProbViews();
+        refreshAllCumulativeProbViews();
         refreshNodeScoreLabels();
         if (scenariosShown) applyScenarioDisplay();
       });
@@ -4232,6 +4257,72 @@ function setStraightenOn(on) {
   }
   function refreshAllEdgeProbViews() {
     edgeProbRegistry.forEach((nodeIds, containerEl) => renderEdgeProbInto(containerEl, nodeIds));
+  }
+
+  // ---- cumulative probability list (同じ表示範囲のノードを累積蓋然性の降順で一覧表示) ----
+  // 「ホルムズ海峡封鎖」と繋がっていないノード（累積蓋然性が常に0）は対象外。
+  const cumulativeProbRegistry = new Map(); // containerEl -> nodeIds, for in-place refresh after a scale/edge change
+  function renderCumulativeProbInto(containerEl, nodeIds) {
+    containerEl.innerHTML = '';
+    const rows = nodeIds
+      .filter(id => isHormuzReachable(id))
+      .map(id => ({ id, cum: cumulativeProbability(id, new Set()) }))
+      .filter(r => r.cum > 0)
+      .sort((a, b) => b.cum - a.cum);
+    if (rows.length === 0) { cumulativeProbRegistry.delete(containerEl); return false; }
+    cumulativeProbRegistry.set(containerEl, nodeIds);
+
+    const scale = probabilityScale; // '4' or '10'
+    const title = document.createElement('div');
+    title.className = 'cumulative-prob-title';
+    title.textContent = `ノードの累積蓋然性（${rows.length}件・${scale === '10' ? '10段階' : '4段階'}）`;
+    containerEl.appendChild(title);
+
+    const scaleRow = document.createElement('div');
+    scaleRow.className = 'cumulative-prob-scale-row';
+    const scale4Chip = document.createElement('span');
+    scale4Chip.className = 'chip' + (scale === '4' ? ' active' : '');
+    scale4Chip.textContent = '4段階';
+    const scale10Chip = document.createElement('span');
+    scale10Chip.className = 'chip' + (scale === '10' ? ' active' : '');
+    scale10Chip.textContent = '10段階（試験）';
+    scale4Chip.addEventListener('click', () => setProbabilityScale('4'));
+    scale10Chip.addEventListener('click', () => setProbabilityScale('10'));
+    scaleRow.appendChild(scale4Chip);
+    scaleRow.appendChild(scale10Chip);
+    containerEl.appendChild(scaleRow);
+
+    const maxCum = Math.max(...rows.map(r => r.cum), 1);
+    const list = document.createElement('div');
+    list.className = 'cumulative-prob-list';
+    rows.forEach(r => {
+      const node = nodesById.get(r.id);
+      const row = document.createElement('div');
+      row.className = 'cumulative-prob-row';
+      const labelEl = document.createElement('span');
+      labelEl.className = 'cumulative-prob-label';
+      labelEl.textContent = node.label;
+      labelEl.title = node.label;
+      labelEl.addEventListener('click', () => jumpToNode(r.id));
+      const barWrap = document.createElement('span');
+      barWrap.className = 'cumulative-prob-bar-wrap';
+      const bar = document.createElement('span');
+      bar.className = 'cumulative-prob-bar';
+      bar.style.width = (Math.min(1, r.cum / maxCum) * 100) + '%';
+      barWrap.appendChild(bar);
+      const pctEl = document.createElement('span');
+      pctEl.className = 'cumulative-prob-pct';
+      pctEl.textContent = Math.round(r.cum * 100) + '%';
+      row.appendChild(labelEl);
+      row.appendChild(barWrap);
+      row.appendChild(pctEl);
+      list.appendChild(row);
+    });
+    containerEl.appendChild(list);
+    return true;
+  }
+  function refreshAllCumulativeProbViews() {
+    cumulativeProbRegistry.forEach((nodeIds, containerEl) => renderCumulativeProbInto(containerEl, nodeIds));
   }
 
   // ツリーSVGの拡大・縮小コントロール。ノード数が多いツリー（特に「このノードを中心に
@@ -4349,14 +4440,18 @@ function setStraightenOn(on) {
     edgeProbContainer.className = 'edge-prob-wrap';
     edgeProbContainer.style.display = 'none';
     const hasEdgeProb = renderEdgeProbInto(edgeProbContainer, nodeIds);
+    const cumulativeProbContainer = document.createElement('div');
+    cumulativeProbContainer.className = 'cumulative-prob-wrap';
+    cumulativeProbContainer.style.display = 'none';
+    const hasCumulativeProb = renderCumulativeProbInto(cumulativeProbContainer, nodeIds);
 
-    if (hasMatrix || hasEdgeProb) {
+    if (hasMatrix || hasEdgeProb || hasCumulativeProb) {
       const tabs = document.createElement('div');
       tabs.className = 'view-tabs';
       const treeTab = document.createElement('span');
       treeTab.className = 'chip active';
       treeTab.textContent = 'ツリー';
-      const containers = [svgContainer, matrixContainer, edgeProbContainer];
+      const containers = [svgContainer, matrixContainer, edgeProbContainer, cumulativeProbContainer];
       function showOnly(active) {
         containers.forEach(c => { c.style.display = c === active ? '' : 'none'; });
       }
@@ -4388,11 +4483,23 @@ function setStraightenOn(on) {
         });
         tabs.appendChild(edgeProbTab);
       }
+      if (hasCumulativeProb) {
+        const cumulativeProbTab = document.createElement('span');
+        cumulativeProbTab.className = 'chip';
+        cumulativeProbTab.textContent = '累積蓋然性';
+        cumulativeProbTab.addEventListener('click', () => {
+          tabs.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+          cumulativeProbTab.classList.add('active');
+          showOnly(cumulativeProbContainer);
+        });
+        tabs.appendChild(cumulativeProbTab);
+      }
       card.appendChild(tabs);
     }
     card.appendChild(svgContainer);
     card.appendChild(matrixContainer);
     card.appendChild(edgeProbContainer);
+    card.appendChild(cumulativeProbContainer);
     document.getElementById('treeGallery').appendChild(card);
     return card;
   }
@@ -4421,18 +4528,22 @@ function setStraightenOn(on) {
     highlightScenariosIn(wrap, scenariosShown ? currentScenarios : null);
     const isoMatrixWrap = document.getElementById('isolationMatrixWrap');
     const isoEdgeProbWrap = document.getElementById('isolationEdgeProbWrap');
+    const isoCumulativeProbWrap = document.getElementById('isolationCumulativeProbWrap');
     const isoTabs = document.getElementById('isolationViewTabs');
     const hasMatrix = renderMatrixInto(isoMatrixWrap, isoNodeIds);
     const hasEdgeProb = renderEdgeProbInto(isoEdgeProbWrap, isoNodeIds);
-    isoTabs.style.display = (hasMatrix || hasEdgeProb) ? '' : 'none';
+    const hasCumulativeProb = renderCumulativeProbInto(isoCumulativeProbWrap, isoNodeIds);
+    isoTabs.style.display = (hasMatrix || hasEdgeProb || hasCumulativeProb) ? '' : 'none';
     isoTabs.querySelector('[data-view="matrix"]').style.display = hasMatrix ? '' : 'none';
     isoTabs.querySelector('[data-view="edgeprob"]').style.display = hasEdgeProb ? '' : 'none';
+    isoTabs.querySelector('[data-view="cumprob"]').style.display = hasCumulativeProb ? '' : 'none';
     // default back to the tree view each time a new node is focused
     isoTabs.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c.dataset.view === 'tree'));
     wrap.style.display = '';
     document.getElementById('isolationZoomBar').style.display = '';
     isoMatrixWrap.style.display = 'none';
     isoEdgeProbWrap.style.display = 'none';
+    isoCumulativeProbWrap.style.display = 'none';
   }
   function hideIsolationFocus() {
     document.getElementById('isolationPanel').style.display = 'none';
