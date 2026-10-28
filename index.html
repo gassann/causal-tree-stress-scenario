@@ -979,8 +979,8 @@
   </section>
 
   <section id="causeHeatmapSection">
-    <h2>業種 × 最終手前ノード 影響ヒートマップ</h2>
-    <p class="desc">「売上」「営業利益」「その他」タグで対象のPL項目（売上高増加/減少・部門売上増加/減少、営業利益増加/減少・部門営業利益増加/減少、または売上原価・売上総利益・経常利益・当期純利益・部門／地域利益など売上・営業利益以外の一般的なPL項目）を切り替え、そのPL項目に直接つながるエッジの「原因ノード（PL項目の手前のノード）」を列、業種を行として、変動率(%)のトリム平均を表示します。ノードの影響度・スコア（有報からの影響度×蓋然性）と揃えるため、増収・増益等のプラス方向（増加系ラベル）は対象外とし、マイナス方向（減少系ラベル）のみを対象にトリム平均を取ります。色は単色の濃淡のみで、変動率の大きさではなく該当する会社数（裏付けの厚さ）を表します。業種の行見出しには「このヒートマップに実際に出てくる会社数／有報からその業種として抽出された全会社数」を表示します。対象は「ホルムズ海峡封鎖」から辿れる原因ノードのみ。マイナス方向のエッジが一つも無い原因ノード（例:「賃料水準の上昇」が不動産業の増益にしか繋がらない場合）は列から除外します。行・列は3つのタグすべてに出てくる組み合わせの和集合で固定され、タグを切り替えても同じ並びのまま（該当しない組み合わせはグレー）。「業種×PL項目」ヒートマップと同じく、迂回路がある直接エッジ・手動非表示ノード・Step2ノード非表示の設定を反映します。</p>
+    <h2>減収率を編集</h2>
+    <p class="desc">「売上」「営業利益」「その他」「全て」タグで対象のPL項目（売上高増加/減少・部門売上増加/減少、営業利益増加/減少・部門営業利益増加/減少、または売上原価・売上総利益・経常利益・当期純利益・部門／地域利益など売上・営業利益以外の一般的なPL項目、あるいはその全部）を切り替え、そのPL項目に直接つながるエッジの「原因ノード（PL項目の手前のノード）」を列、業種を行として、変動率(%)のトリム平均を表示します。ノードの影響度・スコア（有報からの影響度×蓋然性）と揃えるため、増収・増益等のプラス方向（増加系ラベル）は対象外とし、マイナス方向（減少系ラベル）のみを対象にトリム平均を取ります。色は単色の濃淡のみで、変動率の大きさではなく該当する会社数（裏付けの厚さ）を表します。業種の行見出しには「このヒートマップに実際に出てくる会社数／有報からその業種として抽出された全会社数」を表示します。対象は「ホルムズ海峡封鎖」から辿れる原因ノードのみ。マイナス方向のエッジが一つも無い原因ノード（例:「賃料水準の上昇」が不動産業の増益にしか繋がらない場合）は列から除外します。行・列は選択中のタグに実際に出てくる組み合わせだけに絞られます（タグを切り替えると列も変わります）。「売上」タグは実データのみを対象とし、営業利益等からの逆算推計は含めません。「業種×PL項目」ヒートマップと同じく、迂回路がある直接エッジ・手動非表示ノード・Step2ノード非表示の設定を反映します。</p>
     <div class="filter-row" id="causeHeatmapTagRow"></div>
     <div class="pl-heatmap-wrap" id="causeHeatmapWrap"></div>
     <div class="formula-note">
@@ -1135,7 +1135,7 @@
         <li><b>凡例</b> — ノードの枠線の色・エッジの線の種類が何を表すかの説明。常に表示されています。</li>
         <li><b>シナリオ情報</b> — 「シナリオ分析」をオンにしたときだけ表示される、上位シナリオの一覧。</li>
         <li><b>ツリー本体</b> — 「主要な連鎖」（複数の因果がつながった図）と「個別の因果関係」（単独の原因→結果）。</li>
-        <li><b>業種×PL項目 / 業種×最終手前ノード ヒートマップ</b> — ツリーの下にある、業種別の影響度合いを一覧できる表。</li>
+        <li><b>業種×PL項目ヒートマップ／減収率を編集</b>（管理者向け）— ツリーの下にある、業種別の影響度合いを一覧・編集できる表。</li>
       </ul>
 
       <h3 id="help-legend">凡例の見方</h3>
@@ -1200,7 +1200,7 @@
         <li><b>ポジティブなPLノードを表示</b> — オフの間は、増収・増益・コスト減など企業にとって好ましい方向のPL/BSノードを非表示にします（ストレスシナリオではネガティブな影響を見るのが基本のため）。</li>
         <li><b>Step2ノードを非表示</b> — Step2で新規に追加されたノード（枠線が紫）を非表示にします。</li>
         <li><b>マトリクス（分離ビューのタブ）</b> — 影響度・蓋然性の評価値をドラッグ&ドロップで編集するための画面です。評価データのメンテナンス用で、通常の閲覧では使いません。</li>
-        <li><b>業種×PL項目 影響ヒートマップ</b> — ツリーの下に表示される2つのヒートマップのうち1つ目。通常の閲覧では「業種×最終手前ノード 影響ヒートマップ」の方で十分なため、こちらは管理者向けに隠しています。</li>
+        <li><b>業種×PL項目 影響ヒートマップ／減収率を編集</b> — ツリーの下に表示される2つのヒートマップ。どちらもデータの確認・編集用で、通常の閲覧では使いません。</li>
       </ul>
 
       <h3 id="help-isolation">ノードを起点に絞り込む（分離ビュー）</h3>
@@ -1220,7 +1220,7 @@
       <h3 id="help-heatmap">ヒートマップ</h3>
       <ul>
         <li><b>業種×PL項目 影響ヒートマップ</b>（管理者向け。タグ一覧の「管理者向けタグ」を表示すると使えます）— 業種・PL項目ごとの「ネガティブな」変動率(%)の平均を色の濃さで表示します。ツリーのノードをクリックすると、そのノードから辿れるPL項目だけに絞り込まれます。</li>
-        <li><b>業種×最終手前ノード 影響ヒートマップ</b> — 「売上」「営業利益」「その他」タグでPL項目を切り替え、そのPL項目に直接つながるエッジの原因ノード（最終手前ノード）を列、業種を行として変動率(%)を表示します。</li>
+        <li><b>減収率を編集</b>（管理者向け。同じく「管理者向けタグ」を表示すると使えます）— 「売上」「営業利益」「その他」「全て」タグでPL項目を切り替え、そのPL項目に直接つながるエッジの原因ノード（最終手前ノード）を列、業種を行として変動率(%)を表示します。選んだタグに実際に関係する列だけが表示され、「全て」は3タグ全部をまとめた列になります。「売上」タグは実データのみが対象で、営業利益等からの逆算推計は含みません（推計方式の切替も表示されません）。</li>
       </ul>
       <p>どちらも各セルをクリックすると編集（what-if用の上書き）ができ、「編集をリセット」で元に戻せます。</p>
 
@@ -1444,7 +1444,7 @@ const SALES_PL_LABELS = new Set(['売上高増加', '部門売上増加', '売�
 // 逆算した値（操業レバレッジを仮定した推計であり、実際に売上が変化したとは限らない）。
 // 両方が存在するエッジでは、現在選ばれている方式だけをスコア計算に使う
 // （estimateMethodが空文字列＝通常の実測値エッジは常に対象とする）。
-let estimateMethodMode = '実データ';
+let estimateMethodMode = '逆算';
 function estimateMethodAllowed(e) {
   const m = e.estimateMethod;
   return !m || m === estimateMethodMode;
@@ -5389,6 +5389,15 @@ function setStraightenOn(on) {
         title: '売上・営業利益以外の一般的なPL項目（売上原価・売上総利益・経常利益・当期純利益・部門／地域利益など）に直接つながるエッジを対象にします。',
         signByLabel: otherSignByLabel,
       },
+      all: {
+        chipLabel: '全て',
+        title: '売上・営業利益・その他の3タグすべてに直接つながるエッジをまとめて対象にします。',
+        signByLabel: Object.assign(
+          { '売上高増加': 1, '部門売上増加': 1, '売上高減少': -1, '部門売上減少': -1 },
+          { '営業利益増加': 1, '部門営業利益増加': 1, '営業利益減少': -1, '部門営業利益減少': -1 },
+          otherSignByLabel
+        ),
+      },
     };
 
     function parsePct(v) {
@@ -5439,7 +5448,10 @@ function setStraightenOn(on) {
         const sign = signByLabel[t.label];
         if (sign == null) return;
         if (sign > 0) return; // ノードの影響度・スコア（PL合計×蓋然性）と揃えるため、プラス方向（増収・増益等）は対象外
-        if (!ignoreEstimateMode && !estimateMethodAllowed(e)) return; // 実データ/逆算の切替で選ばれていない方式のエッジは対象外
+        // 「売上」タグは、営業利益等から逆算した推計値ではなく実データのみを対象とする
+        // （逆算は操業レバレッジを仮定した推計であり、売上そのものの裏付けではないため）。
+        if (tagKey === 'sales') { if (e.estimateMethod === '逆算') return; }
+        else if (!ignoreEstimateMode && !estimateMethodAllowed(e)) return; // 実データ/逆算の切替で選ばれていない方式のエッジは対象外
         if (isRedundantEdge(e.source, e.target)) return; // 迂回路により非表示になっている直接エッジは無いものとして扱う
         if (isManuallyHiddenNode(t)) return; // 手動で非表示にしたノードは除外後のツリーとして扱う
         if (isStep2ScoreExcluded(e.target)) return; // Step2ノードを非表示にしている場合は除外後のツリーとして扱う
@@ -5507,18 +5519,19 @@ function setStraightenOn(on) {
       });
     }
 
+    // 行・列は選択中のタグ（activeTag）だけを対象に決める。タグごとに関係するPL項目が
+    // 異なるため、他のタグの列を混ぜない（「全て」タグだけは3タグ全部を合わせたsignByLabel
+    // を持つため、結果的に全タグ分の列がまとまって出る）。
     const statsByTag = {};
-    Object.keys(TAG_DEFS).forEach(key => {
-      statsByTag[key] = computeCellStats(key);
-      applyCauseOverridesToStats(key, statsByTag[key]);
-    });
+    statsByTag[activeTag] = computeCellStats(activeTag);
+    applyCauseOverridesToStats(activeTag, statsByTag[activeTag]);
     // 列の存在・並び順を決める専用集計（実データ/逆算の切替フィルタを無視し、両方式を
     // 合算する）。セルの表示内容（statsByTag）とは別に持ち、推計方式を切り替えても
     // 列の本数・並びが変わらないようにする。
     const orderStatsByTag = {};
-    Object.keys(TAG_DEFS).forEach(key => { orderStatsByTag[key] = computeCellStats(key, true); });
+    orderStatsByTag[activeTag] = computeCellStats(activeTag, true);
 
-    // 行・列は3タグ×両推計方式の集合の和集合で固定する。こうしないと、タグや推計方式を
+    // 行・列は選択中のタグ×両推計方式の集合で固定する。こうしないと、推計方式を
     // 切り替えるたびに列の並び・本数が変わってしまい比較しづらいため。
     const industriesSet = new Set();
     const sourcesMap = new Map(); // sourceId -> label
@@ -5616,8 +5629,7 @@ function setStraightenOn(on) {
       if (!sourcesMap.has(e.source)) return;
       const t = baseNodesById.get(e.target);
       if (!t || !t.industry || !industriesSet.has(t.industry)) return;
-      const matchesAnyTag = Object.keys(TAG_DEFS).some(tagKey => TAG_DEFS[tagKey].signByLabel[t.label] != null);
-      if (!matchesAnyTag) return;
+      if (TAG_DEFS[activeTag].signByLabel[t.label] == null) return;
       if (isRedundantEdge(e.source, e.target)) return;
       if (isManuallyHiddenNode(t)) return;
       if (isStep2ScoreExcluded(e.target)) return;
@@ -5847,7 +5859,7 @@ function setStraightenOn(on) {
     tagSelect.addEventListener('change', () => {
       activeTag = tagSelect.value;
       tagSelect.title = tagOptionTitle(TAG_CHOICES, activeTag);
-      paint(activeTag);
+      build();
     });
     tagRow.appendChild(tagSelect);
 
@@ -5855,25 +5867,29 @@ function setStraightenOn(on) {
     // 「実データ(DB)」（EDINET DBの実際の売上高から計算）と「逆算」（操業レバレッジを
     // 仮定した推計）のどちらで補うかの切替。ノードのスコア計算（computeExcludeBest）
     // にも同じ切替を反映させるため、キャッシュの無効化とノードスコア表示の再描画も行う。
-    const estLabelEl = document.createElement('span');
-    estLabelEl.className = 'filter-label';
-    estLabelEl.textContent = '推計方式';
-    tagRow.appendChild(estLabelEl);
-    const EST_METHOD_CHOICES = [
-      ['実データ', '実データ(DB)', '有報に売上高の増減率%が記載されていないエッジは、EDINET DBに記載されている実際の売上高から計算した値を使う（最も信頼できる値）'],
-      ['逆算', '逆算(推計)', '有報に売上高の増減率%が記載されていないエッジは、セグメント売上比率（全社売上×セグメント比率）または操業レバレッジ（前年度の変動費率・固定費を仮定）から売上相当を逆算した値を使う（いずれも推計であり、実際に売上が変化したとは限らない）'],
-    ];
-    const estSelect = document.createElement('select');
-    estSelect.className = 'tag-select';
-    buildTagOptions(estSelect, EST_METHOD_CHOICES, estimateMethodMode);
-    estSelect.addEventListener('change', () => {
-      estimateMethodMode = estSelect.value;
-      invalidateExcludeScoreCache();
-      refreshNodeScoreLabels();
-      if (scenarioFilterOn) { applyVisibility(); refreshIsolationIfOpen(); }
-      build();
-    });
-    tagRow.appendChild(estSelect);
+    // 「売上」タグは実データのみを対象とし逆算推計を使わないため、この切替自体が
+    // 意味を持たない。タグが「売上」の間はこの行を表示しない。
+    if (activeTag !== 'sales') {
+      const estLabelEl = document.createElement('span');
+      estLabelEl.className = 'filter-label';
+      estLabelEl.textContent = '推計方式';
+      tagRow.appendChild(estLabelEl);
+      const EST_METHOD_CHOICES = [
+        ['実データ', '実データ(DB)', '有報に売上高の増減率%が記載されていないエッジは、EDINET DBに記載されている実際の売上高から計算した値を使う（最も信頼できる値）'],
+        ['逆算', '逆算', '有報に売上高の増減率%が記載されていないエッジは、セグメント売上比率（全社売上×セグメント比率）または操業レバレッジ（前年度の変動費率・固定費を仮定）から売上相当を逆算した値を使う（いずれも推計であり、実際に売上が変化したとは限らない）'],
+      ];
+      const estSelect = document.createElement('select');
+      estSelect.className = 'tag-select';
+      buildTagOptions(estSelect, EST_METHOD_CHOICES, estimateMethodMode);
+      estSelect.addEventListener('change', () => {
+        estimateMethodMode = estSelect.value;
+        invalidateExcludeScoreCache();
+        refreshNodeScoreLabels();
+        if (scenarioFilterOn) { applyVisibility(); refreshIsolationIfOpen(); }
+        build();
+      });
+      tagRow.appendChild(estSelect);
+    }
 
     paint(activeTag);
     }
