@@ -775,6 +775,9 @@
 
   #plHeatmapSection, #causeHeatmapSection { max-width: 1400px; width: 100%; margin: 20px auto 0; padding: 0 28px 40px; box-sizing: border-box; }
   #plHeatmapSection .desc, #causeHeatmapSection .desc { max-width: none; }
+  .heatmap-section-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+  .heatmap-section-head .ribbon-toggle { margin-left: 0; }
+  .heatmap-collapsed #plHeatmapBody { display: none; }
   .pl-heatmap-caption { font-size: 11.5px; color: var(--ink-muted); margin-bottom: 8px; }
   .pl-heatmap-wrap { overflow-x: auto; padding-bottom: 6px; }
   .pl-heatmap-table { border-collapse: separate; border-spacing: 2px; font-size: 11px; }
@@ -953,10 +956,17 @@
     </section>
   </main>
 
-  <section id="plHeatmapSection">
-    <h2>業種 × PL項目 影響ヒートマップ</h2>
-    <p class="desc">色の濃さは、その業種・PL項目に対する「ネガティブな」変動率(%)の平均（ポジティブな変動は無視）。ツリーのノードをクリックすると、そのノードから辿れるPL項目だけに絞り込んで表示します（他のノードをクリックするまで表示は変わりません）。</p>
-    <div class="pl-heatmap-wrap" id="plHeatmapWrap"></div>
+  <section id="plHeatmapSection" class="heatmap-collapsed">
+    <div class="heatmap-section-head">
+      <h2>業種 × PL項目 影響ヒートマップ</h2>
+      <button type="button" id="plHeatmapToggle" class="ribbon-toggle" aria-expanded="false" aria-controls="plHeatmapBody">
+        <span class="ribbon-toggle-icon">▸</span><span class="ribbon-toggle-label">表示する</span>
+      </button>
+    </div>
+    <div id="plHeatmapBody">
+      <p class="desc">色の濃さは、その業種・PL項目に対する「ネガティブな」変動率(%)の平均（ポジティブな変動は無視）。ツリーのノードをクリックすると、そのノードから辿れるPL項目だけに絞り込んで表示します（他のノードをクリックするまで表示は変わりません）。</p>
+      <div class="pl-heatmap-wrap" id="plHeatmapWrap"></div>
+    </div>
   </section>
 
   <section id="causeHeatmapSection">
@@ -1192,7 +1202,7 @@
 
       <h3 id="help-heatmap">ヒートマップ</h3>
       <ul>
-        <li><b>業種×PL項目 影響ヒートマップ</b> — 業種・PL項目ごとの「ネガティブな」変動率(%)の平均を色の濃さで表示します。ツリーのノードをクリックすると、そのノードから辿れるPL項目だけに絞り込まれます。</li>
+        <li><b>業種×PL項目 影響ヒートマップ</b> — 業種・PL項目ごとの「ネガティブな」変動率(%)の平均を色の濃さで表示します。ツリーのノードをクリックすると、そのノードから辿れるPL項目だけに絞り込まれます。デフォルトでは折りたたまれているので、見出し横の「表示する」をクリックすると開きます。</li>
         <li><b>業種×最終手前ノード 影響ヒートマップ</b> — 「売上」「営業利益」「その他」タグでPL項目を切り替え、そのPL項目に直接つながるエッジの原因ノード（最終手前ノード）を列、業種を行として変動率(%)を表示します。</li>
       </ul>
       <p>どちらも各セルをクリックすると編集（what-if用の上書き）ができ、「編集をリセット」で元に戻せます。</p>
@@ -1560,6 +1570,24 @@ function setStraightenOn(on) {
     try { localStorage.setItem(COLLAPSE_KEY, collapsed ? '1' : '0'); } catch (e) { /* ignore */ }
     apply(collapsed);
   });
+})();
+
+// ---- 業種×PL項目ヒートマップの折りたたみ（デフォルトは非表示） ----
+(function () {
+  const section = document.getElementById('plHeatmapSection');
+  const toggle = document.getElementById('plHeatmapToggle');
+  if (!section || !toggle) return;
+  const icon = toggle.querySelector('.ribbon-toggle-icon');
+  const label = toggle.querySelector('.ribbon-toggle-label');
+  let collapsed = true;
+  function apply() {
+    section.classList.toggle('heatmap-collapsed', collapsed);
+    toggle.setAttribute('aria-expanded', String(!collapsed));
+    icon.textContent = collapsed ? '▸' : '▾';
+    label.textContent = collapsed ? '表示する' : '折りたたむ';
+  }
+  apply();
+  toggle.addEventListener('click', () => { collapsed = !collapsed; apply(); });
 })();
 
 // ---- 使い方マニュアル モーダル ----
