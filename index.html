@@ -1688,7 +1688,7 @@ function setStraightenOn(on) {
   // タグ（企業へのネガティブ影響なしノード非表示・ポジティブなPLノードを表示など）の切り替えには自動
   // 追従しない。絞り込みビューを開いている間にそれらを切り替えたら呼び直す。
   function refreshIsolationIfOpen() {
-    if (isolationFocusId) showIsolationFocus(isolationFocusId, isolationDescendantsOnly);
+    if (isolationFocusId) showIsolationFocus(isolationFocusId, isolationDescendantsOnly, true);
   }
 
   function computeIsolationSet(focusId, descendantsOnly) {
@@ -4507,7 +4507,7 @@ function setStraightenOn(on) {
     return card;
   }
 
-  function showIsolationFocus(focusId, descendantsOnly) {
+  function showIsolationFocus(focusId, descendantsOnly, preserveTab) {
     isolationDescendantsOnly = !!descendantsOnly;
     const isoSet = computeIsolationSet(focusId, isolationDescendantsOnly);
     // 「企業へのネガティブ影響なしノード非表示」は、辿った先のどこかで実在企業のPLにネガティブな影響が及ぶかどうかを
@@ -4533,6 +4533,10 @@ function setStraightenOn(on) {
     const isoEdgeProbWrap = document.getElementById('isolationEdgeProbWrap');
     const isoCumulativeProbWrap = document.getElementById('isolationCumulativeProbWrap');
     const isoTabs = document.getElementById('isolationViewTabs');
+    // 「蓋然性の段階」切り替えなど、同じノードのまま表示を再構築するだけのrefresh
+    // （preserveTab）では、ユーザーが選んでいたタブ（マトリクス／エッジ蓋然性／
+    // 累積蓋然性）を維持する。新しいノードに絞り込み直す場合のみツリータブに戻す。
+    const previousActiveView = preserveTab ? isoTabs.querySelector('.chip.active')?.dataset.view : null;
     const hasMatrix = renderMatrixInto(isoMatrixWrap, isoNodeIds);
     const hasEdgeProb = renderEdgeProbInto(isoEdgeProbWrap, isoNodeIds);
     const hasCumulativeProb = renderCumulativeProbInto(isoCumulativeProbWrap, isoNodeIds);
@@ -4540,13 +4544,14 @@ function setStraightenOn(on) {
     isoTabs.querySelector('[data-view="matrix"]').style.display = hasMatrix ? '' : 'none';
     isoTabs.querySelector('[data-view="edgeprob"]').style.display = hasEdgeProb ? '' : 'none';
     isoTabs.querySelector('[data-view="cumprob"]').style.display = hasCumulativeProb ? '' : 'none';
-    // default back to the tree view each time a new node is focused
-    isoTabs.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c.dataset.view === 'tree'));
-    wrap.style.display = '';
-    document.getElementById('isolationZoomBar').style.display = '';
-    isoMatrixWrap.style.display = 'none';
-    isoEdgeProbWrap.style.display = 'none';
-    isoCumulativeProbWrap.style.display = 'none';
+    const availableViews = { tree: true, matrix: hasMatrix, edgeprob: hasEdgeProb, cumprob: hasCumulativeProb };
+    const activeView = (previousActiveView && availableViews[previousActiveView]) ? previousActiveView : 'tree';
+    isoTabs.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c.dataset.view === activeView));
+    wrap.style.display = activeView === 'tree' ? '' : 'none';
+    document.getElementById('isolationZoomBar').style.display = activeView === 'tree' ? '' : 'none';
+    isoMatrixWrap.style.display = activeView === 'matrix' ? '' : 'none';
+    isoEdgeProbWrap.style.display = activeView === 'edgeprob' ? '' : 'none';
+    isoCumulativeProbWrap.style.display = activeView === 'cumprob' ? '' : 'none';
   }
   function hideIsolationFocus() {
     document.getElementById('isolationPanel').style.display = 'none';
