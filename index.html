@@ -1761,7 +1761,7 @@ function setStraightenOn(on) {
     chip.className = 'chip';
     chip.dataset.industry = ind;
     chip.textContent = ind;
-    chip.title = `「${ind}」が報告した因果関係（エッジ）のみに絞り込みます。スコア計算・シナリオ算出にも反映されます。`;
+    chip.title = `「${ind}」の有報から抽出した因果関係（エッジ）のみに絞り込みます（そのエッジが無くなったノードも非表示になります）。スコア計算・シナリオ算出にも反映されます。`;
     chip.addEventListener('click', () => {
       if (activeIndustries.has(ind)) {
         activeIndustries.delete(ind);
@@ -1838,7 +1838,7 @@ function setStraightenOn(on) {
     chip.className = 'chip' + (excludedIndustries.has(ind) ? ' active' : '');
     chip.dataset.industryExclude = ind;
     chip.textContent = ind;
-    chip.title = `「${ind}」が報告した因果関係（エッジ）をツリーから取り除きます。スコア計算・シナリオ算出にも反映されます。`;
+    chip.title = `「${ind}」の有報から抽出した因果関係（エッジ）をツリーから取り除きます（そのエッジが無くなったノードも非表示になります）。スコア計算・シナリオ算出にも反映されます。`;
     chip.addEventListener('click', () => {
       if (excludedIndustries.has(ind)) {
         excludedIndustries.delete(ind);
