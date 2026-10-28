@@ -225,12 +225,6 @@
   .tag-section-note {
     font-size: 11px; font-weight: 400; color: var(--ink-muted);
   }
-  .admin-badge {
-    display: inline-block; font-size: 9.5px; font-weight: 700; letter-spacing: .02em;
-    color: var(--ink-faint); background: var(--surface-alt); border: 1px solid var(--line);
-    border-radius: 999px; padding: 1px 7px; margin-left: 5px; vertical-align: middle;
-    white-space: nowrap; cursor: default;
-  }
   .tag-section .filter-row:empty { display: none; }
   .industry-weight-label {
     display: inline-flex; align-items: center; gap: 6px;
@@ -784,6 +778,9 @@
   .heatmap-section-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
   .heatmap-section-head .ribbon-toggle { margin-left: 0; }
   .heatmap-collapsed #plHeatmapBody { display: none; }
+  .tag-section-admin .tag-section-title .ribbon-toggle { margin-left: 8px; }
+  .admin-tag-collapsed #adminTagBody { display: none; }
+  body:not(.admin-tags-open) .matrix-tab-chip { display: none !important; }
   .pl-heatmap-caption { font-size: 11.5px; color: var(--ink-muted); margin-bottom: 8px; }
   .pl-heatmap-wrap { overflow-x: auto; padding-bottom: 6px; }
   .pl-heatmap-table { border-collapse: separate; border-spacing: 2px; font-size: 11px; }
@@ -892,8 +889,6 @@
 
       <section class="tag-section tag-section-structure">
         <h3 class="tag-section-title">ツリー構造を変えるタグ<span class="tag-section-note">シナリオ計算にも反映されます</span></h3>
-        <div class="filter-row" id="filterRow"></div>
-        <div class="filter-row" id="industryExcludeRow"></div>
         <div class="filter-row" id="industryWeightRow"></div>
         <div class="filter-row" id="structureMiscRow"></div>
       </section>
@@ -902,6 +897,20 @@
         <h3 class="tag-section-title">スコア・シナリオ計算</h3>
         <div class="filter-row" id="scoreModeRow"></div>
         <div class="filter-row scenario-controls" id="scenarioRow"></div>
+      </section>
+
+      <section class="tag-section tag-section-admin admin-tag-collapsed" id="adminTagSection">
+        <h3 class="tag-section-title">
+          管理者向けタグ<span class="tag-section-note">通常のユーザーは操作不要です</span>
+          <button type="button" id="adminTagToggle" class="ribbon-toggle" aria-expanded="false" aria-controls="adminTagBody">
+            <span class="ribbon-toggle-icon">▸</span><span class="ribbon-toggle-label">表示する</span>
+          </button>
+        </h3>
+        <div id="adminTagBody">
+          <div class="filter-row" id="filterRow"></div>
+          <div class="filter-row" id="industryExcludeRow"></div>
+          <div class="filter-row" id="adminMiscRow"></div>
+        </div>
       </section>
 
       <section class="tag-section">
@@ -940,7 +949,7 @@
     </div>
     <div class="view-tabs" id="isolationViewTabs" style="display:none;">
       <span class="chip active" data-view="tree">ツリー</span>
-      <span class="chip" data-view="matrix">マトリクス<span class="admin-badge" title="通常のユーザーは操作する必要はありません。">管理者向け</span></span>
+      <span class="chip matrix-tab-chip" data-view="matrix">マトリクス</span>
       <span class="chip" data-view="edgeprob">エッジ蓋然性</span>
       <span class="chip" data-view="cumprob">累積蓋然性</span>
     </div>
@@ -1116,6 +1125,7 @@
         <a href="#help-tags-structure">タグ：ツリー構造を変える</a>
         <a href="#help-tags-score">タグ：スコア・シナリオ</a>
         <a href="#help-tags-style">タグ：後処理・表示スタイル</a>
+        <a href="#help-tags-admin">タグ：管理者向け</a>
         <a href="#help-isolation">ノード起点の絞り込み</a>
         <a href="#help-scenario">シナリオ分析</a>
         <a href="#help-heatmap">ヒートマップ</a>
@@ -1167,13 +1177,9 @@
       </ul>
 
       <h3 id="help-tags-structure">タグ②：ツリー構造を変えるタグ</h3>
-      <p class="help-note">この区分のタグは<b>ツリーの形そのものやスコア・シナリオの計算結果にも反映されます</b>。「管理者向け」バッジが付いたタグ（業種で絞り込み／業種を除外／企業へのネガティブ影響なしノード非表示／Step2ノードを非表示）と、分離ビューの「マトリクス」タブは、通常のユーザーは基本的に操作する必要はありません。</p>
+      <p class="help-note">この区分のタグは<b>ツリーの形そのものやスコア・シナリオの計算結果にも反映されます</b>。</p>
       <ul>
-        <li><b>業種で絞り込み</b> — 選んだ業種の有報から抽出した因果関係（エッジ）のみに絞り込みます。そのエッジが無くなったノードも非表示になります。「すべて表示」で解除できます。</li>
-        <li><b>業種を除外</b> — 選んだ業種の有報から抽出した因果関係（エッジ）をツリーから取り除きます。「除外なし」で解除できます（デフォルトで不動産業が除外されています）。</li>
         <li><b>業種ごとの重み</b> — PL合計を業種間で合算する際に、各業種の寄与に掛ける係数です（デフォルト1＝単純合計）。</li>
-        <li><b>企業へのネガティブ影響なしノード非表示</b> — 下流を辿っても実在企業のPLにネガティブな影響が及ばないノードを非表示にします。</li>
-        <li><b>Step2ノードを非表示</b> — Step2で新規に追加されたノード（枠線が紫）を非表示にします。</li>
         <li><b>ノード非表示（クリックで除外）</b> — オンの間にノードをクリックすると、そのノードを表示から除外します。「非表示ノードを戻す」で復元できます。</li>
         <li><b>迂回路がある直接エッジを非表示</b> — A→Cの直接エッジがある場合、A→B→Cのような迂回路が図の中に別にあるなら、直接エッジの方を非表示にします。</li>
       </ul>
@@ -1195,11 +1201,21 @@
         <li><b>エッジをまっすぐに近づける</b> — ノードの並び順は変えずに、エッジができるだけ直線に近くなるよう調整します。</li>
       </ul>
 
+      <h3 id="help-tags-admin">タグ⑤：管理者向けタグ</h3>
+      <p class="help-note">通常のユーザーは<b>基本的に操作する必要はありません</b>。タグ一覧の一番下にある「管理者向けタグ」は、デフォルトで折りたたまれて非表示になっています。見出し横の「表示する」をクリックすると開きます（同時に、分離ビューの「マトリクス」タブも使えるようになります）。</p>
+      <ul>
+        <li><b>業種で絞り込み</b> — 選んだ業種の有報から抽出した因果関係（エッジ）のみに絞り込みます。そのエッジが無くなったノードも非表示になります。「すべて表示」で解除できます。</li>
+        <li><b>業種を除外</b> — 選んだ業種の有報から抽出した因果関係（エッジ）をツリーから取り除きます。「除外なし」で解除できます（デフォルトで不動産業が除外されています）。</li>
+        <li><b>企業へのネガティブ影響なしノード非表示</b> — 下流を辿っても実在企業のPLにネガティブな影響が及ばないノードを非表示にします。</li>
+        <li><b>Step2ノードを非表示</b> — Step2で新規に追加されたノード（枠線が紫）を非表示にします。</li>
+        <li><b>マトリクス（分離ビューのタブ）</b> — 影響度・蓋然性の評価値をドラッグ&ドロップで編集するための画面です。評価データのメンテナンス用で、通常の閲覧では使いません。</li>
+      </ul>
+
       <h3 id="help-isolation">ノードを起点に絞り込む（分離ビュー）</h3>
-      <p>「ノード限定」をオンにしてノードをクリックすると、そのノードを中心にした上流・下流だけの図がパネルで開きます。パネル上部のタブで、以下の4つの見方を切り替えられます（データがある場合のみタブが表示されます）。</p>
+      <p>「ノード限定」をオンにしてノードをクリックすると、そのノードを中心にした上流・下流だけの図がパネルで開きます。パネル上部のタブで、以下の見方を切り替えられます（データがある場合のみタブが表示されます）。</p>
       <ul>
         <li><b>ツリー</b> — 絞り込んだノードだけの因果図。</li>
-        <li><b>マトリクス</b> — 影響度×蓋然性が付与されたノードを、影響度・蓋然性の2軸に並べた表（ドラッグでセル間を移動＝評価値の編集も可能）。</li>
+        <li><b>マトリクス</b>（管理者向け。タグ一覧の「管理者向けタグ」を表示すると使えます）— 影響度×蓋然性が付与されたノードを、影響度・蓋然性の2軸に並べた表（ドラッグでセル間を移動＝評価値の編集も可能）。</li>
         <li><b>エッジ蓋然性</b> — エッジごとの蓋然性(1-4、または10段階)を列ごとに並べた表（ドラッグで編集可能）。</li>
         <li><b>累積蓋然性</b> — 各ノードの累積蓋然性（ホルムズ海峡封鎖を起点として、親→子のエッジの蓋然性を掛け合わせた値）を大きい順に一覧表示します。</li>
       </ul>
@@ -1765,6 +1781,25 @@ function setStraightenOn(on) {
   toggle.addEventListener('click', () => { collapsed = !collapsed; apply(); });
 })();
 
+// ---- 管理者向けタグの折りたたみ（デフォルトは非表示。マトリクスタブも連動して隠す） ----
+(function () {
+  const section = document.getElementById('adminTagSection');
+  const toggle = document.getElementById('adminTagToggle');
+  if (!section || !toggle) return;
+  const icon = toggle.querySelector('.ribbon-toggle-icon');
+  const label = toggle.querySelector('.ribbon-toggle-label');
+  let collapsed = true;
+  function apply() {
+    section.classList.toggle('admin-tag-collapsed', collapsed);
+    document.body.classList.toggle('admin-tags-open', !collapsed);
+    toggle.setAttribute('aria-expanded', String(!collapsed));
+    icon.textContent = collapsed ? '▸' : '▾';
+    label.textContent = collapsed ? '表示する' : '折りたたむ';
+  }
+  apply();
+  toggle.addEventListener('click', () => { collapsed = !collapsed; apply(); });
+})();
+
 // ---- 使い方マニュアル モーダル ----
 (function () {
   const btn = document.getElementById('helpBtn');
@@ -2069,14 +2104,6 @@ function setStraightenOn(on) {
     const chosen = choices.find(([v]) => v === value);
     return (chosen && chosen[2]) || '';
   }
-  // 管理者向け（通常のユーザーは操作不要）のタグ・タブに付ける目印バッジ。
-  function addAdminBadge(el) {
-    const badge = document.createElement('span');
-    badge.className = 'admin-badge';
-    badge.textContent = '管理者向け';
-    badge.title = '通常のユーザーは操作する必要はありません。';
-    el.appendChild(badge);
-  }
 
   // ---- impact / probability level badges (currently populated for a subset of nodes only) ----
   const LEVEL_COLORS = { 1: '#6B9E6E', 2: '#C9A227', 3: '#D2691E', 4: '#B23A3A' };
@@ -2152,7 +2179,6 @@ function setStraightenOn(on) {
   const label = document.createElement('span');
   label.className = 'filter-label';
   label.textContent = '業種で絞り込み';
-  addAdminBadge(label);
   filterRow.appendChild(label);
 
   const resetChip = document.createElement('span');
@@ -2210,6 +2236,7 @@ function setStraightenOn(on) {
   const industryExcludeRow = document.getElementById('industryExcludeRow');
   const industryWeightRow = document.getElementById('industryWeightRow');
   const structureMiscRow = document.getElementById('structureMiscRow');
+  const adminMiscRow = document.getElementById('adminMiscRow');
 
   // ---- 業種を除外 ----
   // 選択した業種（エッジのe.industry＝原因・結果を報告した会社の業種）を、表示だけで
@@ -2219,7 +2246,6 @@ function setStraightenOn(on) {
   const industryExcludeLabel = document.createElement('span');
   industryExcludeLabel.className = 'filter-label';
   industryExcludeLabel.textContent = '業種を除外';
-  addAdminBadge(industryExcludeLabel);
   industryExcludeRow.appendChild(industryExcludeLabel);
 
   function refreshAfterStructureChange() {
@@ -2993,11 +3019,15 @@ function setStraightenOn(on) {
   structureMiscLabel.textContent = 'ノード・エッジの非表示';
   structureMiscRow.appendChild(structureMiscLabel);
 
+  const adminMiscLabel = document.createElement('span');
+  adminMiscLabel.className = 'filter-label';
+  adminMiscLabel.textContent = 'ノードの非表示';
+  adminMiscRow.appendChild(adminMiscLabel);
+
   let hideNoImpactNodes = true;
   const impactFilterChip = document.createElement('span');
   impactFilterChip.className = 'chip' + (hideNoImpactNodes ? ' active' : '');
   impactFilterChip.textContent = '企業へのネガティブ影響なしノード非表示';
-  addAdminBadge(impactFilterChip);
   impactFilterChip.title = 'オンにすると、下流を辿っても実在企業のPL（勘定科目）にネガティブな影響が及ばないノードを非表示にします。影響が全く無いノードだけでなく、増収・増益などポジティブな影響しか無いノードも「ネガティブ影響なし」として隠します。「PLノードを非表示」と併用した場合も、PLノードを含む元のデータで判定した影響の有無で絞り込みます。';
   impactFilterChip.addEventListener('click', () => {
     hideNoImpactNodes = !hideNoImpactNodes;
@@ -3005,7 +3035,7 @@ function setStraightenOn(on) {
     applyVisibility();
     refreshIsolationIfOpen();
   });
-  structureMiscRow.appendChild(impactFilterChip);
+  adminMiscRow.appendChild(impactFilterChip);
 
   // ---- positive PL/BS node filter ----
   // ストレスシナリオ分析が目的のため、増収・増益・コスト減などの「企業に好ましい」
@@ -3037,7 +3067,6 @@ function setStraightenOn(on) {
   const step2FilterChip = document.createElement('span');
   step2FilterChip.className = 'chip';
   step2FilterChip.textContent = 'Step2ノードを非表示';
-  addAdminBadge(step2FilterChip);
   step2FilterChip.title = 'オンにすると、Step2（人がシナリオと参照資料を選んで追加）で新規に追加されたノードを非表示にします（枠線が紫のノード）。Step2由来でも元々存在したノード同士を繋ぐエッジは表示されたままです。ツリー構造を変えるタグなので、シナリオ計算（有報からの影響度×蓋然性）にも反映されます。';
   step2FilterChip.addEventListener('click', () => {
     hideStep2Nodes = !hideStep2Nodes;
@@ -3051,7 +3080,7 @@ function setStraightenOn(on) {
     refreshNodeScoreLabels();
     if (scenariosShown) applyScenarioDisplay();
   });
-  structureMiscRow.appendChild(step2FilterChip);
+  adminMiscRow.appendChild(step2FilterChip);
 
   // ---- Step2ノードの紫表示の切り替え ----
   const step2ColorChip = document.createElement('span');
@@ -4879,9 +4908,8 @@ function setStraightenOn(on) {
       tabs.appendChild(treeTab);
       if (hasMatrix) {
         const matrixTab = document.createElement('span');
-        matrixTab.className = 'chip';
+        matrixTab.className = 'chip matrix-tab-chip';
         matrixTab.textContent = 'マトリクス';
-        addAdminBadge(matrixTab);
         matrixTab.addEventListener('click', () => {
           tabs.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
           matrixTab.classList.add('active');
